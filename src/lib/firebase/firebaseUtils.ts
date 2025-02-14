@@ -11,6 +11,7 @@ import {
   doc,
   updateDoc,
   deleteDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
@@ -29,8 +30,17 @@ export const signInWithGoogle = async () => {
 };
 
 // Firestore functions
-export const addDocument = (collectionName: string, data: any) =>
-  addDoc(collection(db, collectionName), data);
+export const addDocument = (collectionName: string, data: any) => {
+  // Only add timestamps for quotes and settings
+  if (collectionName === 'quotes' || collectionName === 'settings') {
+    data = {
+      ...data,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+  }
+  return addDoc(collection(db, collectionName), data);
+};
 
 export const getDocuments = async (collectionName: string) => {
   const querySnapshot = await getDocs(collection(db, collectionName));
@@ -40,8 +50,16 @@ export const getDocuments = async (collectionName: string) => {
   }));
 };
 
-export const updateDocument = (collectionName: string, id: string, data: any) =>
-  updateDoc(doc(db, collectionName, id), data);
+export const updateDocument = (collectionName: string, id: string, data: any) => {
+  // Only add timestamps for quotes and settings
+  if (collectionName === 'quotes' || collectionName === 'settings') {
+    data = {
+      ...data,
+      updatedAt: serverTimestamp()
+    };
+  }
+  return updateDoc(doc(db, collectionName, id), data);
+};
 
 export const deleteDocument = (collectionName: string, id: string) =>
   deleteDoc(doc(db, collectionName, id));
