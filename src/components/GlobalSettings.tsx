@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { db } from '@/lib/firebase/firebase';
 import { doc, setDoc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useFirebase } from '@/lib/contexts/FirebaseContext';
 import type { GlobalSettings } from '@/lib/types';
 
 const defaultSettings: GlobalSettings = {
@@ -39,26 +39,26 @@ const defaultSettings: GlobalSettings = {
 };
 
 function GlobalSettingsContent() {
+  const { db } = useFirebase();
   const [settings, setSettings] = useState<GlobalSettings>(defaultSettings);
   const [isSaving, setIsSaving] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
-    initializeSettings();
-  }, []);
+    if (db) {
+      initializeSettings();
+    }
+  }, [db]);
 
   const initializeSettings = async () => {
+    if (!db) {
+      setMessage({ type: 'warning', text: 'Working with default settings until database connection is established.' });
+      return;
+    }
+    
     setIsLoading(true);
     try {
-      if (!db) {
-        console.warn('Database not initialized yet');
-        setMessage({ type: 'error', text: 'Database connection not available. Using default values.' });
-        setSettings(defaultSettings);
-        setIsLoading(false);
-        return;
-      }
-
       const docRef = doc(db, 'global_pricing', 'current');
       const docSnap = await getDoc(docRef);
       
@@ -88,20 +88,9 @@ function GlobalSettingsContent() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="text-gray-600">Loading settings...</p>
-        </div>
-      </div>
-    );
-  }
-
   const handleSave = async () => {
     if (!db) {
-      setMessage({ type: 'error', text: 'Database connection not available. Changes will not be saved.' });
+      setMessage({ type: 'error', text: 'Cannot save settings - database connection not available.' });
       return;
     }
 
@@ -151,6 +140,17 @@ function GlobalSettingsContent() {
       return newSettings;
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="text-gray-600">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase/firebase';
+import { useFirebase } from '@/lib/contexts/FirebaseContext';
 import type { GlobalSettings, LumberPrice } from '@/lib/types';
 
 interface FormData {
@@ -64,31 +64,55 @@ const initialFormData: FormData = {
   distance: ''
 };
 
+const defaultSettings: GlobalSettings = {
+  lumberPrices: {},
+  transportationCosts: {
+    baseDeliveryFee: {},
+    perMileCharge: 0
+  },
+  additionalCosts: {
+    painted: 0,
+    notched: 0,
+    heatTreated: 0
+  },
+  buildIntricacyCosts: {},
+  vehicleDimensions: {}
+};
+
 export default function PalletPricingTool() {
+  const { db } = useFirebase();
   const [formData, setFormData] = useState<FormData>(initialFormData);
-  const [settings, setSettings] = useState<GlobalSettings | null>(null);
+  const [settings, setSettings] = useState<GlobalSettings>(defaultSettings);
   const [results, setResults] = useState<CalculationResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (db) {
+      loadSettings();
+    }
+  }, [db]);
 
   const loadSettings = async () => {
+    if (!db) {
+      setError('Working with default settings until database connection is established.');
+      return;
+    }
+    
     try {
       const docRef = doc(db, 'global_pricing', 'current');
       const docSnap = await getDoc(docRef);
       
       if (docSnap.exists()) {
         setSettings(docSnap.data() as GlobalSettings);
+        setError('');
       } else {
-        setError('Global settings not found. Please configure settings first.');
+        setError('Global settings not found. Using default values.');
       }
     } catch (error) {
       console.error('Error loading settings:', error);
-      setError('Error loading settings');
+      setError('Error loading settings. Using default values.');
     }
   };
 
@@ -188,7 +212,10 @@ export default function PalletPricingTool() {
   };
 
   const saveQuote = async () => {
-    if (!results || !settings) return;
+    if (!results || !db) {
+      setError('Cannot save quote - database connection not available.');
+      return;
+    }
 
     try {
       const quoteData = {

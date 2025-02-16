@@ -4,12 +4,22 @@ import Header from './components/Header';
 import Footer from './components/Footer';
 import { AuthProvider } from '@/lib/contexts/AuthContext';
 import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import { FirebaseProvider } from '@/lib/contexts/FirebaseContext';
 
 const montserrat = Montserrat({ 
   subsets: ["latin"],
   display: 'swap',
   variable: '--font-montserrat',
 });
+
+const inter = Inter({ subsets: ['latin'] });
+
+export const metadata: Metadata = {
+  title: 'Pallet Pricing Calculator',
+  description: 'Calculate pallet prices with ease',
+};
 
 export default function RootLayout({
   children,
@@ -19,15 +29,17 @@ export default function RootLayout({
   return (
     <html lang="en" className={montserrat.variable}>
       <body className={montserrat.className}>
-        <AuthProvider>
-          <div className="min-h-screen bg-gray-50">
-            <Header />
-            <main className="container mx-auto px-4 py-8">
-              {children}
-            </main>
-            <Footer />
-          </div>
-        </AuthProvider>
+        <FirebaseProvider>
+          <AuthProvider>
+            <div className="min-h-screen bg-gray-50">
+              <Header />
+              <main className="container mx-auto px-4 py-8">
+                {children}
+              </main>
+              <Footer />
+            </div>
+          </AuthProvider>
+        </FirebaseProvider>
       </body>
     </html>
   );
