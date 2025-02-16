@@ -1,3 +1,5 @@
+'use client';
+
 // Import Firebase modules
 import { initializeApp, getApps, FirebaseApp, FirebaseOptions } from 'firebase/app';
 import { 
@@ -18,65 +20,47 @@ const firebaseConfig: FirebaseOptions = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-// Validate Firebase config
-const validateConfig = () => {
-  const requiredFields = [
-    'apiKey',
-    'authDomain',
-    'projectId',
-    'storageBucket',
-    'messagingSenderId',
-    'appId'
-  ] as const;
+let app: FirebaseApp | undefined;
+let db: Firestore | undefined;
+let auth: Auth | undefined;
+let storage: FirebaseStorage | undefined;
 
-  const missingFields = requiredFields.filter(field => !firebaseConfig[field]);
-  
-  if (missingFields.length > 0) {
-    throw new Error(`Missing Firebase configuration fields: ${missingFields.join(', ')}`);
+function initializeFirebase() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    if (!getApps().length) {
+      app = initializeApp(firebaseConfig);
+      console.log('Firebase app initialized');
+    } else {
+      app = getApps()[0];
+      console.log('Using existing Firebase app');
+    }
+
+    if (app) {
+      db = getFirestore(app);
+      auth = getAuth(app);
+      storage = getStorage(app);
+
+      // Enable offline persistence for Firestore
+      enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code === 'failed-precondition') {
+          console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
+        } else if (err.code === 'unimplemented') {
+          console.warn('The current browser does not support persistence.');
+        }
+      });
+
+      console.log('Firebase services initialized successfully');
+    }
+  } catch (error) {
+    console.error('Error initializing Firebase:', error);
   }
-};
+}
 
-// Initialize Firebase
-let app: FirebaseApp;
-let db: Firestore;
-let auth: Auth;
-let storage: FirebaseStorage;
-
-try {
-  validateConfig();
-  
-  // Check if Firebase is already initialized
-  if (!getApps().length) {
-    app = initializeApp(firebaseConfig);
-    console.log('Firebase app initialized');
-  } else {
-    app = getApps()[0];
-    console.log('Using existing Firebase app');
-  }
-
-  // Initialize services
-  db = getFirestore(app);
-  auth = getAuth(app);
-  storage = getStorage(app);
-
-  // Enable offline persistence for Firestore
-  if (typeof window !== 'undefined') {
-    enableIndexedDbPersistence(db).catch((err) => {
-      if (err.code === 'failed-precondition') {
-        console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
-      } else if (err.code === 'unimplemented') {
-        console.warn('The current browser does not support persistence.');
-      }
-    });
-  }
-
-  // Log successful initialization
-  console.log('Firebase services initialized successfully');
-  console.log('Project ID:', firebaseConfig.projectId);
-  console.log('Auth Domain:', firebaseConfig.authDomain);
-} catch (error) {
-  console.error('Error initializing Firebase:', error);
-  throw error;
+// Initialize Firebase on the client side only
+if (typeof window !== 'undefined') {
+  initializeFirebase();
 }
 
 export { db, auth, storage };

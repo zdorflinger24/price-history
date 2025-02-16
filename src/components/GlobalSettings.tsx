@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { db } from '@/lib/firebase/firebase';
 import { doc, setDoc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import type { GlobalSettings } from '@/lib/types';
@@ -38,7 +38,7 @@ const defaultSettings: GlobalSettings = {
   }
 };
 
-export default function GlobalSettings() {
+function GlobalSettingsContent() {
   const [settings, setSettings] = useState<GlobalSettings>(defaultSettings);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,6 +51,14 @@ export default function GlobalSettings() {
   const initializeSettings = async () => {
     setIsLoading(true);
     try {
+      if (!db) {
+        console.warn('Database not initialized yet');
+        setMessage({ type: 'error', text: 'Database connection not available. Using default values.' });
+        setSettings(defaultSettings);
+        setIsLoading(false);
+        return;
+      }
+
       const docRef = doc(db, 'global_pricing', 'current');
       const docSnap = await getDoc(docRef);
       
@@ -92,6 +100,11 @@ export default function GlobalSettings() {
   }
 
   const handleSave = async () => {
+    if (!db) {
+      setMessage({ type: 'error', text: 'Database connection not available. Changes will not be saved.' });
+      return;
+    }
+
     setIsSaving(true);
     try {
       // First, update the current settings
@@ -108,6 +121,7 @@ export default function GlobalSettings() {
 
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
     } catch (error) {
+      console.error('Error saving settings:', error);
       setMessage({ type: 'error', text: 'Error saving settings' });
     }
     setIsSaving(false);
@@ -326,5 +340,21 @@ export default function GlobalSettings() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Client-side only wrapper
+export default function GlobalSettings() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="text-gray-600">Loading settings...</p>
+        </div>
+      </div>
+    }>
+      <GlobalSettingsContent />
+    </Suspense>
   );
 } 
