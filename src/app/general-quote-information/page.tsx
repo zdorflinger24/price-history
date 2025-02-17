@@ -50,7 +50,7 @@ export default function QuotesPage() {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quoteInfo, setQuoteInfo] = useState({
     salesPerson: '',
-    companyName: '',
+    customerName: '',
     contactName: '',
     contactEmail: '',
     contactPhone: ''
@@ -87,8 +87,10 @@ export default function QuotesPage() {
         distance: Number(newLocation.distance)
       };
 
-      setLocations(prev => [...prev, location]);
+      const updatedLocations = [...locations, location];
+      setLocations(updatedLocations);
       setNewLocation({ name: '', address: '', distance: '' });
+      localStorage.setItem('shippingLocations', JSON.stringify(updatedLocations));
     } catch (error) {
       console.error('Error adding location:', error);
     }
@@ -102,7 +104,9 @@ export default function QuotesPage() {
       return;
     }
 
-    setLocations(prev => prev.filter(loc => loc.id !== locationId));
+    const updatedLocations = locations.filter(loc => loc.id !== locationId);
+    setLocations(updatedLocations);
+    localStorage.setItem('shippingLocations', JSON.stringify(updatedLocations));
   };
 
   if (loading) {
@@ -128,53 +132,22 @@ export default function QuotesPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Quote Information</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Sales Person</label>
+            <label className="text-sm font-medium text-gray-700">Salesperson <span className="text-red-500">*</span></label>
+            <select name="salesperson" value={quoteInfo.salesPerson} onChange={(e) => setQuoteInfo(prev => ({ ...prev, salesPerson: e.target.value }))} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+              <option value="" disabled>Please select a salesperson</option>
+              <option value="John Doe">John Doe</option>
+              <option value="Jane Smith">Jane Smith</option>
+              {/* Add more salesperson options as needed */}
+            </select>
+          </div>
+          <div className="flex flex-col space-y-1">
+            <label className="text-sm font-medium text-gray-700">Customer Name</label>
             <input
               type="text"
-              value={quoteInfo.salesPerson}
-              onChange={(e) => setQuoteInfo(prev => ({ ...prev, salesPerson: e.target.value }))}
+              value={quoteInfo.customerName}
+              onChange={(e) => setQuoteInfo(prev => ({ ...prev, customerName: e.target.value }))}
               className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter sales person name"
-            />
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Company Name</label>
-            <input
-              type="text"
-              value={quoteInfo.companyName}
-              onChange={(e) => setQuoteInfo(prev => ({ ...prev, companyName: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter company name"
-            />
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Contact Name</label>
-            <input
-              type="text"
-              value={quoteInfo.contactName}
-              onChange={(e) => setQuoteInfo(prev => ({ ...prev, contactName: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter contact name"
-            />
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Contact Email</label>
-            <input
-              type="email"
-              value={quoteInfo.contactEmail}
-              onChange={(e) => setQuoteInfo(prev => ({ ...prev, contactEmail: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter contact email"
-            />
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Contact Phone</label>
-            <input
-              type="tel"
-              value={quoteInfo.contactPhone}
-              onChange={(e) => setQuoteInfo(prev => ({ ...prev, contactPhone: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter contact phone"
+              placeholder="Enter customer name"
             />
           </div>
         </div>

@@ -27,7 +27,10 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   return (
-    <html lang="en" className={montserrat.variable}>
+    <html lang="en" className={montserrat.variable} style={({ "--ro-scrollbar-height": "0px" } as unknown) as React.CSSProperties}>
+      <head>
+        {/* ... existing code ... */}
+      </head>
       <body className={montserrat.className}>
         <FirebaseProvider>
           <AuthProvider>

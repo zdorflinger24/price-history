@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import PalletPricingTool from '@/components/PalletPricingTool';
-import GlobalSettings from '@/components/GlobalSettings';
+import BasicQuoteCalculator from '@/app/components/BasicQuoteCalculator';
+import SettingsPage from '@/app/components/Settings';
 import AdvancedCalculator from '@/components/AdvancedCalculator';
-import { Calculator, Settings, BarChart2, Truck } from 'lucide-react';
+import { Calculator, Settings as SettingsIcon, BarChart2, Truck } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import AbacusIcon from './components/AbacusIcon';
 
-const QuotesPage = dynamic(() => import('@/app/quotes/page'), { ssr: false });
+const QuotesPage = dynamic(() => import('@/app/general-quote-information/page'), { ssr: false });
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('quotes');
@@ -24,7 +25,7 @@ export default function Home() {
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
-            title="Quotes & Shipping"
+            title="General Quote Information"
           >
             <Truck className="w-5 h-5" />
           </button>
@@ -35,9 +36,9 @@ export default function Home() {
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
-            title="Quick Calculator"
+            title="Basic Quote Calculator"
           >
-            <Calculator className="w-5 h-5" />
+            <AbacusIcon className="w-5 h-5" />
           </button>
           <button
             onClick={() => setActiveTab('advanced')}
@@ -46,9 +47,9 @@ export default function Home() {
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
-            title="Advanced Calculator"
+            title="Advanced Pricing Calculator"
           >
-            <BarChart2 className="w-5 h-5" />
+            <Calculator className="w-5 h-5" />
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -57,9 +58,9 @@ export default function Home() {
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
-            title="Global Settings"
+            title="Settings"
           >
-            <Settings className="w-5 h-5" />
+            <SettingsIcon className="w-5 h-5" />
           </button>
         </div>
       </div>
@@ -67,12 +68,12 @@ export default function Home() {
       {activeTab === 'quotes' ? (
         <QuotesPage />
       ) : activeTab === 'pricing' ? (
-        <PalletPricingTool />
+        <BasicQuoteCalculator />
       ) : activeTab === 'advanced' ? (
         <AdvancedCalculator />
-      ) : (
-        <GlobalSettings />
-      )}
+      ) : activeTab === 'settings' ? (
+        <SettingsPage />
+      ) : null}
     </main>
   );
 }

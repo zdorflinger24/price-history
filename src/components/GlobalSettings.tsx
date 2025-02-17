@@ -11,7 +11,6 @@ const defaultSettings: GlobalSettings = {
     'Combo': { a: 8, b: 96, c: 500 },
     'Green Pine': { a: 5, b: 60, c: 650 },
     'SYP': { a: 4, b: 48, c: 700 },
-    'Hardwood': { a: 2, b: 0, c: 850 }
   },
   buildIntricacyCosts: {
     'Automated': 0.75,
@@ -96,14 +95,18 @@ function GlobalSettingsContent() {
 
     setIsSaving(true);
     try {
+      const settingsToSave = {
+        ...settings,
+        lumberPrices: Object.fromEntries(Object.entries(settings.lumberPrices).filter(([key]) => key !== 'Hardwood'))
+      };
       // First, update the current settings
       const currentRef = doc(db, 'global_pricing', 'current');
-      await setDoc(currentRef, settings);
+      await setDoc(currentRef, settingsToSave);
 
       // Then, add a new document to track the history with timestamp
       const historyRef = collection(db, 'global_pricing');
       await addDoc(historyRef, {
-        ...settings,
+        ...settingsToSave,
         timestamp: serverTimestamp(),
         type: 'update'
       });

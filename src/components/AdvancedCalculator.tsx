@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useFirebase } from '@/lib/contexts/FirebaseContext';
 import { Plus, Trash2 } from 'lucide-react';
 import type { GlobalSettings } from '@/lib/types';
@@ -90,6 +90,43 @@ const initialComponents: ComponentType = {
   stringers: [createStringer()]
 };
 
+const TextInputField = ({ 
+  label, 
+  value, 
+  onChange
+}: { 
+  label: string; 
+  value: string; 
+  onChange: (text: string) => void;
+}) => {
+  const [localValue, setLocalValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalValue(value);
+    }
+  }, [value, isFocused]);
+
+  return (
+    <div className="flex flex-col space-y-1">
+      <label className="text-sm font-medium text-gray-700">{label}</label>
+      <input
+        type="text"
+        value={localValue}
+        onChange={(e) => setLocalValue(e.target.value)}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => { 
+          setIsFocused(false);
+          onChange(localValue);
+        }}
+        className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+        placeholder="Enter pallet name"
+      />
+    </div>
+  );
+};
+
 export default function AdvancedCalculator() {
   const { db } = useFirebase();
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
@@ -97,6 +134,12 @@ export default function AdvancedCalculator() {
   const [error, setError] = useState('');
   const [pallets, setPallets] = useState<PalletComponents[]>([createNewPallet()]);
   const [locations, setLocations] = useState<ShippingLocation[]>([]);
+  const [painted, setPainted] = useState<boolean>(false);
+  const [notched, setNotched] = useState<boolean>(false);
+  const [heatTreated, setHeatTreated] = useState<boolean>(false);
+  const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [activePalletId, setActivePalletId] = useState(pallets[0]?.id);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -117,6 +160,48 @@ export default function AdvancedCalculator() {
 
     loadData();
   }, [db]);
+
+  useEffect(() => {
+    const storedLocations = localStorage.getItem('shippingLocations');
+    if (storedLocations) {
+      setLocations(JSON.parse(storedLocations));
+    }
+  }, []);
+
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const containerRect = container.getBoundingClientRect();
+      const containerCenter = containerRect.left + containerRect.width / 2;
+      let closestPalletId = '';
+      let minDistance = Infinity;
+
+      pallets.forEach(pallet => {
+        const el = document.getElementById(`pallet-${pallet.id}`);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const elCenter = rect.left + rect.width / 2;
+          const distance = Math.abs(containerCenter - elCenter);
+          if (distance < minDistance) {
+            minDistance = distance;
+            closestPalletId = pallet.id;
+          }
+        }
+      });
+
+      if (closestPalletId && closestPalletId !== activePalletId) {
+        setActivePalletId(closestPalletId);
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    // Initial check
+    handleScroll();
+
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [pallets, activePalletId]);
 
   const calculateBoardFeet = (dimensions: BoardDimensions | StringerDimensions) => {
     const { count, width, length } = dimensions;
@@ -215,36 +300,27 @@ export default function AdvancedCalculator() {
     onChange: (value: number) => void;
     isCount?: boolean;
   }) => {
-    const [localValue, setLocalValue] = useState(isCount ? value.toString() : value.toFixed(2));
-    
+    const [localValue, setLocalValue] = useState(isCount ? value.toString() : value.toString());
+    const [isFocused, setIsFocused] = useState(false);
+
     useEffect(() => {
-      if (document.activeElement !== document.getElementById(label)) {
-        setLocalValue(isCount ? value.toString() : value.toFixed(2));
+      if (!isFocused) {
+        setLocalValue(isCount ? value.toString() : value.toString());
       }
-    }, [value, isCount, label]);
+    }, [value, isFocused, isCount]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value;
       setLocalValue(newValue);
-      
-      if (newValue === '' || newValue === '.') {
-        return;
-      }
+      // Do not call onChange here to allow free typing
+    };
 
-      if (isCount) {
-        const intValue = parseInt(newValue);
-        if (!isNaN(intValue) && intValue >= 0) {
-          onChange(intValue);
-        }
-      } else {
-        const num = parseFloat(newValue);
-        if (!isNaN(num)) {
-          onChange(num);
-        }
-      }
+    const handleFocus = () => {
+      setIsFocused(true);
     };
 
     const handleBlur = () => {
+      setIsFocused(false);
       if (localValue === '' || localValue === '.') {
         setLocalValue(isCount ? '0' : '0.00');
         onChange(0);
@@ -253,7 +329,8 @@ export default function AdvancedCalculator() {
 
       const num = parseFloat(localValue);
       if (!isNaN(num)) {
-        setLocalValue(isCount ? Math.floor(num).toString() : num.toFixed(2));
+        const formatted = isCount ? Math.floor(num).toString() : num.toFixed(2);
+        setLocalValue(formatted);
         onChange(isCount ? Math.floor(num) : num);
       } else {
         setLocalValue(isCount ? '0' : '0.00');
@@ -269,6 +346,7 @@ export default function AdvancedCalculator() {
           type="text"
           inputMode={isCount ? "numeric" : "decimal"}
           value={localValue}
+          onFocus={handleFocus}
           onChange={handleChange}
           onBlur={handleBlur}
           className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
@@ -289,7 +367,7 @@ export default function AdvancedCalculator() {
     onRemove: () => void;
     isStringer: boolean;
   }) => (
-    <div className="flex flex-col space-y-2 bg-white p-3">
+    <div className="flex flex-col space-y-1 bg-white p-2">
       <InputField
         label="Count #"
         value={dimensions.count}
@@ -328,7 +406,6 @@ export default function AdvancedCalculator() {
         >
           {settings?.lumberPrices ? (
             Object.entries(settings.lumberPrices)
-              .filter(([type]) => type !== 'Hardwood')
               .map(([type]) => (
                 <option key={type} value={type}>
                   {type}
@@ -362,15 +439,15 @@ export default function AdvancedCalculator() {
     const totalBoardFeet = components.reduce((acc, comp) => acc + calculateBoardFeet(comp), 0);
 
     return (
-      <div className="space-y-2">
-        <div className="flex justify-between items-center border-b border-gray-200 pb-2">
+      <div className="space-y-1">
+        <div className="flex justify-between items-center border-b border-gray-200 pb-1">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <span className="text-sm font-medium text-gray-600">
             Board Feet: {totalBoardFeet.toFixed(2)}
           </span>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-3 w-80">
+        <div className="bg-gray-50 rounded-lg p-2 w-full">
           {components.map((comp) => (
             <ComponentRow
               key={comp.id}
@@ -389,17 +466,13 @@ export default function AdvancedCalculator() {
     const totalBoardFeet = calculatePalletBoardFeet(pallet);
 
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-4 w-[500px] flex-shrink-0">
+      <div id={`pallet-${pallet.id}`} className="bg-white rounded-lg border border-gray-200 p-4 min-w-[500px] w-full flex-shrink-0">
         <div className="grid grid-cols-1 gap-3 mb-4">
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Pallet Name</label>
-            <input
-              type="text"
-              value={pallet.name}
-              onChange={(e) => handlePalletChange(pallet.id, 'name', e.target.value)}
-              className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+          <TextInputField
+            label="Pallet Name"
+            value={pallet.name}
+            onChange={(text) => handlePalletChange(pallet.id, 'name', text)}
+          />
           <div className="flex flex-col space-y-1">
             <label className="text-sm font-medium text-gray-700">Shipping Location</label>
             <select
@@ -415,43 +488,42 @@ export default function AdvancedCalculator() {
               ))}
             </select>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-gray-600">
-              Total Board Feet: {totalBoardFeet.toFixed(2)}
-            </span>
-            {pallets.length > 1 && (
-              <button
-                onClick={() => removePallet(pallet.id)}
-                className="p-2 text-red-600 hover:text-red-800 transition-colors"
-                title="Remove Pallet"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-            )}
-          </div>
         </div>
-
-        <div className="space-y-4">
+        
+        <div className="space-y-4 mb-4">
           <ComponentSection
             title="Deck Boards"
             type="deckBoards"
             components={pallet.deckBoards}
             palletId={pallet.id}
           />
-          
           <ComponentSection
             title="Lead Boards"
             type="leadBoards"
             components={pallet.leadBoards}
             palletId={pallet.id}
           />
-          
           <ComponentSection
             title="Stringers"
             type="stringers"
             components={pallet.stringers}
             palletId={pallet.id}
           />
+        </div>
+
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-600">
+            Total Board Feet: {totalBoardFeet.toFixed(2)}
+          </span>
+          {pallets.length > 1 && (
+            <button
+              onClick={() => removePallet(pallet.id)}
+              className="p-2 text-red-600 hover:text-red-800 transition-colors"
+              title="Remove Pallet"
+            >
+              <Trash2 className="w-5 h-5" />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -475,6 +547,21 @@ export default function AdvancedCalculator() {
 
   const totalBoardFeet = pallets.reduce((acc, pallet) => acc + calculatePalletBoardFeet(pallet), 0);
 
+  const calculateTotalComponents = () => {
+    return pallets.reduce((acc, pallet) => {
+      return {
+        deckBoards: acc.deckBoards + pallet.deckBoards.reduce((sum, board) => sum + board.count, 0),
+        leadBoards: acc.leadBoards + pallet.leadBoards.reduce((sum, board) => sum + board.count, 0),
+        stringers: acc.stringers + pallet.stringers.reduce((sum, stringer) => sum + stringer.count, 0)
+      };
+    }, { deckBoards: 0, leadBoards: 0, stringers: 0 });
+  };
+
+  const calculateFasteners = () => {
+    const components = calculateTotalComponents();
+    return (components.deckBoards + components.leadBoards) * components.stringers * 2;
+  };
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -493,10 +580,117 @@ export default function AdvancedCalculator() {
         </div>
       </div>
       
-      <div className="flex space-x-6 overflow-x-auto pb-4">
+      {pallets.length > 1 && (
+        <div className="flex justify-center space-x-4 mb-4">
+          {pallets.map((pallet, index) => (
+            <div key={pallet.id} className="flex flex-col items-center">
+              <button
+                onClick={() => {
+                  setActivePalletId(pallet.id);
+                  const el = document.getElementById(`pallet-${pallet.id}`);
+                  if (el) { el.scrollIntoView({ behavior: 'smooth', inline: 'center' }); }
+                }}
+                className={`w-3 h-3 rounded-full ${activePalletId === pallet.id ? 'bg-blue-600' : 'bg-gray-400'}`}
+                title={pallet.name}
+              ></button>
+              <span className="text-xs mt-1">{pallet.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div ref={scrollContainerRef} className="flex space-x-6 overflow-x-auto pb-4">
         {pallets.map(pallet => (
           <PalletSection key={pallet.id} pallet={pallet} />
         ))}
+      </div>
+
+      <div className="bg-white rounded-lg border border-gray-200 p-6 mt-8">
+        <h2 className="text-xl font-bold mb-4">Advanced Pricing Summary</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-semibold mb-2">Component Totals</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Total Deck Boards:</span>
+                  <span className="font-medium">{calculateTotalComponents().deckBoards}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Lead Boards:</span>
+                  <span className="font-medium">{calculateTotalComponents().leadBoards}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Stringers:</span>
+                  <span className="font-medium">{calculateTotalComponents().stringers}</span>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <span>Total Fasteners Required:</span>
+                  <span className="font-medium">{calculateFasteners()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-semibold mb-2">Additional Options</h3>
+              <div className="space-y-2">
+                <label className="flex items-center">
+                  <input type="checkbox" checked={painted} onChange={e => setPainted(e.target.checked)} className="mr-2" />
+                  <span>Painted (+75%)</span>
+                </label>
+                <label className="flex items-center">
+                  <input type="checkbox" checked={notched} onChange={e => setNotched(e.target.checked)} className="mr-2" />
+                  <span>Notched (+85%)</span>
+                </label>
+                <label className="flex items-center">
+                  <input type="checkbox" checked={heatTreated} onChange={e => setHeatTreated(e.target.checked)} className="mr-2" />
+                  <span>Heat Treated (+100%)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-semibold mb-2">Delivery Information</h3>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm mb-1">Delivery Fee ($)</label>
+                  <input
+                    type="number"
+                    value={deliveryFee}
+                    onChange={e => setDeliveryFee(Number(e.target.value))}
+                    className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-semibold mb-2">Pricing Summary</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>Total Board Feet:</span>
+                  <span className="font-medium">{totalBoardFeet.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Additional Options Cost:</span>
+                  <span className="font-medium">
+                    +{((painted ? 75 : 0) + (notched ? 85 : 0) + (heatTreated ? 100 : 0))}%
+                  </span>
+                </div>
+                <div className="flex justify-between border-t pt-2">
+                  <span>Total Delivered Cost:</span>
+                  <span className="font-medium">${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0)) + deliveryFee).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-blue-600 font-semibold">
+                  <span>30% Net Revenue Price:</span>
+                  <span>${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0)) * 1.3 + deliveryFee).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
