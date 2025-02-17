@@ -260,8 +260,11 @@ export default function PalletPricingTool() {
 
   if (!settings) {
     return (
-      <div className="text-center py-8">
-        <p className="text-red-600">{error || 'Loading settings...'}</p>
+      <div className="flex items-center justify-center h-64">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          <p className="text-gray-600">Loading settings...</p>
+        </div>
       </div>
     );
   }

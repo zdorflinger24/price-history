@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import BasicQuoteCalculator from '@/app/components/BasicQuoteCalculator';
-import SettingsPage from '@/app/components/Settings';
-import AdvancedCalculator from '@/components/AdvancedCalculator';
+import BasicQuoteCalculator from "@/app/components/BasicQuoteCalculator";
+import SettingsPage from "@/components/GlobalSettings";
+import AdvancedCalculator from "@/app/components/AdvancedCalculator";
 import { Calculator, Settings as SettingsIcon, BarChart2, Truck } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import AbacusIcon from './components/AbacusIcon';
+import AbacusIcon from "@/app/components/AbacusIcon";
 
-const QuotesPage = dynamic(() => import('@/app/general-quote-information/page'), { ssr: false });
+const QuotesPage = dynamic(() => import("@/app/general-quote-information/page"), { ssr: false });
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('quotes');
@@ -16,7 +16,7 @@ export default function Home() {
   return (
     <main className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold"></h1>
+        <h1 className="text-3xl font-bold">Pallet Quote Manager</h1>
         <div className="flex space-x-4">
           <button
             onClick={() => setActiveTab('quotes')}
