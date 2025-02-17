@@ -4,16 +4,30 @@ import { useState } from 'react';
 import PalletPricingTool from '@/components/PalletPricingTool';
 import GlobalSettings from '@/components/GlobalSettings';
 import AdvancedCalculator from '@/components/AdvancedCalculator';
-import { Calculator, Settings, BarChart2 } from 'lucide-react';
+import { Calculator, Settings, BarChart2, Truck } from 'lucide-react';
+import dynamic from 'next/dynamic';
+
+const QuotesPage = dynamic(() => import('@/app/quotes/page'), { ssr: false });
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState('pricing');
+  const [activeTab, setActiveTab] = useState('quotes');
 
   return (
     <main className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Pallet Pricing Calculator</h1>
+        <h1 className="text-3xl font-bold">Pallet Quote Manager</h1>
         <div className="flex space-x-4">
+          <button
+            onClick={() => setActiveTab('quotes')}
+            className={`p-2 rounded-lg transition-colors ${
+              activeTab === 'quotes'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+            title="Quotes & Shipping"
+          >
+            <Truck className="w-5 h-5" />
+          </button>
           <button
             onClick={() => setActiveTab('pricing')}
             className={`p-2 rounded-lg transition-colors ${
@@ -50,7 +64,9 @@ export default function Home() {
         </div>
       </div>
 
-      {activeTab === 'pricing' ? (
+      {activeTab === 'quotes' ? (
+        <QuotesPage />
+      ) : activeTab === 'pricing' ? (
         <PalletPricingTool />
       ) : activeTab === 'advanced' ? (
         <AdvancedCalculator />

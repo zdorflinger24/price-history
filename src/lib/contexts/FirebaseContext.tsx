@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import ClientOnly from '@/lib/components/ClientOnly';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -16,45 +17,98 @@ const firebaseConfig = {
 interface FirebaseContextType {
   app: FirebaseApp | null;
   db: Firestore | null;
+  initialized: boolean;
 }
 
 const FirebaseContext = createContext<FirebaseContextType>({
   app: null,
-  db: null
+  db: null,
+  initialized: false
 });
 
-let firebaseInitialized = false;
-
-export function FirebaseProvider({ children }: { children: ReactNode }) {
-  const [app, setApp] = useState<FirebaseApp | null>(null);
-  const [db, setDb] = useState<Firestore | null>(null);
+function FirebaseProviderContent({ children }: { children: ReactNode }) {
+  const [context, setContext] = useState<FirebaseContextType>({
+    app: null,
+    db: null,
+    initialized: false
+  });
 
   useEffect(() => {
-    if (typeof window === 'undefined' || firebaseInitialized) return;
+    let mounted = true;
 
-    try {
-      let firebaseApp;
-      if (!getApps().length) {
-        firebaseApp = initializeApp(firebaseConfig);
-      } else {
-        firebaseApp = getApps()[0];
+    const initializeFirebase = async () => {
+      if (context.initialized) return;
+
+      try {
+        let firebaseApp: FirebaseApp;
+        
+        if (!getApps().length) {
+          const missingKeys = Object.entries(firebaseConfig)
+            .filter(([_, value]) => !value)
+            .map(([key]) => key);
+
+          if (missingKeys.length > 0) {
+            throw new Error(`Missing Firebase configuration keys: ${missingKeys.join(', ')}`);
+          }
+
+          firebaseApp = initializeApp(firebaseConfig);
+        } else {
+          firebaseApp = getApps()[0];
+        }
+
+        const firestoreDb = getFirestore(firebaseApp);
+        
+        if (mounted) {
+          setContext({
+            app: firebaseApp,
+            db: firestoreDb,
+            initialized: true
+          });
+        }
+      } catch (error) {
+        console.error('Error initializing Firebase:', error);
+        if (mounted) {
+          setContext(prev => ({ ...prev, initialized: true }));
+        }
       }
+    };
 
-      setApp(firebaseApp);
-      setDb(getFirestore(firebaseApp));
-      firebaseInitialized = true;
-    } catch (error) {
-      console.error('Error initializing Firebase:', error);
-    }
-  }, []);
+    initializeFirebase();
+
+    return () => {
+      mounted = false;
+    };
+  }, [context.initialized]);
 
   return (
-    <FirebaseContext.Provider value={{ app, db }}>
+    <FirebaseContext.Provider value={context}>
       {children}
     </FirebaseContext.Provider>
   );
 }
 
+export function FirebaseProvider({ children }: { children: ReactNode }) {
+  return (
+    <ClientOnly>
+      <FirebaseProviderContent>{children}</FirebaseProviderContent>
+    </ClientOnly>
+  );
+}
+
 export function useFirebase() {
-  return useContext(FirebaseContext);
+  const context = useContext(FirebaseContext);
+  if (context === undefined) {
+    throw new Error('useFirebase must be used within a FirebaseProvider');
+  }
+  return context;
+}
+
+// Helper function for consistent date formatting
+export function formatDate(date: Date): string {
+  return date.toISOString();
+}
+
+// Helper function for getting current timestamp
+export function getCurrentTimestamp(): Date {
+  return new Date();
 } 

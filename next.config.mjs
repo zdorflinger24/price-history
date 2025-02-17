@@ -26,6 +26,14 @@ const nextConfig = {
   },
   async rewrites() {
     return [
+      {
+        source: "/api/anthropic/:path*",
+        destination: "https://api.anthropic.com/:path*",
+      },
+      {
+        source: "/api/replicate/:path*",
+        destination: "https://api.replicate.com/:path*",
+      }
     ];
   },
 };
