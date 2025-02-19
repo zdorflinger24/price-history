@@ -263,30 +263,10 @@ export default function PalletPricingTool() {
         setError('Global settings not found. Please configure settings first.');
       }
 
-      // Load locations from database
-      const locationsRef = doc(db, 'shipping_locations', 'current');
-      const locationsSnap = await getDoc(locationsRef);
-      
       // Load locations from localStorage
       const storedLocations = localStorage.getItem('shippingLocations');
-      const localLocations = storedLocations ? JSON.parse(storedLocations) : [];
-      
-      // Merge locations from database and localStorage
-      let allLocations: ShippingLocation[] = localLocations;
-      
-      if (locationsSnap.exists() && locationsSnap.data().locations) {
-        const dbLocations = locationsSnap.data().locations;
-        
-        // Merge locations, avoiding duplicates by ID
-        const locationMap = new Map();
-        [...localLocations, ...dbLocations].forEach(loc => {
-          locationMap.set(loc.id, loc);
-        });
-        
-        allLocations = Array.from(locationMap.values());
-      }
-      
-      setLocations(allLocations);
+      const existingLocations = storedLocations ? JSON.parse(storedLocations) : [];
+      setLocations(existingLocations);
       
     } catch (error) {
       console.error('Error loading data:', error);
@@ -294,10 +274,29 @@ export default function PalletPricingTool() {
     }
   };
 
+  // Add effect to listen for localStorage changes
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'shippingLocations') {
+        const storedLocations = e.newValue ? JSON.parse(e.newValue) : [];
+        setLocations(storedLocations);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   // Keep locations synced with localStorage
   useEffect(() => {
-    localStorage.setItem('shippingLocations', JSON.stringify(locations));
-  }, [locations]);
+    const storedLocations = localStorage.getItem('shippingLocations');
+    if (storedLocations) {
+      const parsedLocations = JSON.parse(storedLocations);
+      if (JSON.stringify(parsedLocations) !== JSON.stringify(locations)) {
+        setLocations(parsedLocations);
+      }
+    }
+  }, []);
 
   const handleInputChange = (palletId: string, e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -392,25 +391,9 @@ export default function PalletPricingTool() {
   const handleAddLocation = async (newLocation: ShippingLocation) => {
     setLocations(prev => [...prev, newLocation]);
     
-    // Also update the database immediately
-    if (db) {
-      try {
-        const locationsRef = doc(db, 'shipping_locations', 'current');
-        const locationsSnap = await getDoc(locationsRef);
-        
-        let existingLocations = [];
-        if (locationsSnap.exists() && locationsSnap.data().locations) {
-          existingLocations = locationsSnap.data().locations;
-        }
-        
-        await setDoc(locationsRef, {
-          locations: [...existingLocations, newLocation]
-        });
-      } catch (error) {
-        console.error('Error updating locations in database:', error);
-        // Don't show error to user since the location is still saved locally
-      }
-    }
+    // Save to localStorage
+    const updatedLocations = [...locations, newLocation];
+    localStorage.setItem('shippingLocations', JSON.stringify(updatedLocations));
   };
 
   const saveQuotes = async (pallets: PalletData[]) => {
