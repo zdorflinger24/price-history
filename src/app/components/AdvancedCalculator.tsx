@@ -45,6 +45,7 @@ interface PalletComponents {
   deckBoards: BoardDimensions[];
   leadBoards: BoardDimensions[];
   stringers: StringerDimensions[];
+  results: any | null;
 }
 
 const generateId = (() => {
@@ -77,11 +78,12 @@ const createStringer = (): StringerDimensions => ({
 
 const createNewPallet = (): PalletComponents => ({
   id: generateId(),
-  name: `Pallet ${generateId()}`,
+  name: '',
   locationId: null,
   deckBoards: [createBoard('board')],
   leadBoards: [createBoard('board')],
-  stringers: [createStringer()]
+  stringers: [createStringer()],
+  results: null
 });
 
 const initialComponents: ComponentType = {
@@ -227,7 +229,7 @@ export default function AdvancedCalculator() {
       pallet.id === palletId 
         ? {
             ...pallet,
-            [componentType]: pallet[componentType].map(item =>
+            [componentType]: pallet[componentType].map((item: BoardDimensions | StringerDimensions) =>
               item.id === componentId
                 ? {
                     ...item,
@@ -282,7 +284,7 @@ export default function AdvancedCalculator() {
         ? {
             ...pallet,
             [type]: pallet[type].length > 1 
-              ? pallet[type].filter(item => item.id !== componentId)
+              ? pallet[type].filter((item: BoardDimensions | StringerDimensions) => item.id !== componentId)
               : pallet[type]
           }
         : pallet
@@ -562,51 +564,127 @@ export default function AdvancedCalculator() {
     return (components.deckBoards + components.leadBoards) * components.stringers * 2;
   };
 
+  const handleCalculatePricing = () => {
+    // For now, just recalculate the totals
+    // This will be expanded later with more complex pricing logic
+    const components = calculateTotalComponents();
+    const fasteners = calculateFasteners();
+    // You might want to store these results in state
+  };
+
+  const handleGenerateQuote = async () => {
+    setLoading(true);
+    try {
+      // This will be implemented later with database functionality
+      // For now, just show success message
+      setTimeout(() => {
+        setLoading(false);
+      }, 1000);
+    } catch (error) {
+      setError('Error generating quote');
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Advanced Pricing Calculator</h2>
-        <div className="flex items-center space-x-6">
-          <div className="text-lg font-semibold text-blue-600">
-            Total Board Feet: {totalBoardFeet.toFixed(2)}
-          </div>
-          <button
-            onClick={addPallet}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Pallet</span>
-          </button>
-        </div>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-semibold text-gray-900">Advanced Quote Calculator</h2>
+        <button
+          type="button"
+          onClick={addPallet}
+          className="inline-flex items-center px-4 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+        >
+          <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Pallet
+        </button>
       </div>
-      
-      {pallets.length > 1 && (
-        <div className="flex justify-center space-x-4 mb-4">
+
+      {/* Pallet Navigation */}
+      <div className="mb-6 border-b border-gray-200">
+        <div className="flex space-x-2 overflow-x-auto pb-2">
           {pallets.map((pallet, index) => (
-            <div key={pallet.id} className="flex flex-col items-center">
-              <button
-                onClick={() => {
-                  setActivePalletId(pallet.id);
-                  const el = document.getElementById(`pallet-${pallet.id}`);
-                  if (el) { el.scrollIntoView({ behavior: 'smooth', inline: 'center' }); }
-                }}
-                className={`w-3 h-3 rounded-full ${activePalletId === pallet.id ? 'bg-blue-600' : 'bg-gray-400'}`}
-                title={pallet.name}
-              ></button>
-              <span className="text-xs mt-1">{pallet.name}</span>
-            </div>
+            <button
+              key={pallet.id}
+              onClick={() => {
+                const element = document.getElementById(`pallet-${pallet.id}`);
+                element?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                setActivePalletId(pallet.id);
+              }}
+              className={`inline-flex items-center px-4 py-2 rounded-t-lg font-medium text-sm transition-colors whitespace-nowrap
+                ${pallet.id === activePalletId
+                  ? 'bg-white text-blue-600 border-2 border-b-0 border-blue-600'
+                  : 'text-gray-500 hover:text-gray-700 border border-transparent hover:border-gray-300'
+                }`}
+            >
+              <span className="mr-2">{index + 1}</span>
+              <span>{pallet.name || `Unnamed Pallet ${index + 1}`}</span>
+            </button>
           ))}
         </div>
-      )}
+      </div>
 
-      <div ref={scrollContainerRef} className="flex space-x-6 overflow-x-auto pb-4">
-        {pallets.map(pallet => (
-          <PalletSection key={pallet.id} pallet={pallet} />
+      <div className="flex overflow-x-auto snap-x snap-mandatory" ref={scrollContainerRef}>
+        {pallets.map((pallet, index) => (
+          <div
+            key={pallet.id}
+            id={`pallet-${pallet.id}`}
+            className="relative bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow flex-none w-full snap-center px-4"
+          >
+            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Pallet {index + 1}</h3>
+              {pallets.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removePallet(pallet.id)}
+                  className="text-red-600 hover:text-red-700 focus:outline-none"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            <PalletSection pallet={pallet} />
+          </div>
         ))}
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 p-6 mt-8">
-        <h2 className="text-xl font-bold mb-4">Advanced Pricing Summary</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Advanced Pricing Summary</h2>
+          <div className="flex space-x-4">
+            <button
+              type="button"
+              onClick={handleCalculatePricing}
+              disabled={loading}
+              className={`px-6 py-2 rounded-lg font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
+                loading
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
+              }`}
+            >
+              {loading ? 'Calculating...' : 'Calculate Pricing'}
+            </button>
+            {pallets.some(p => p.results) && (
+              <button
+                type="button"
+                onClick={handleGenerateQuote}
+                disabled={loading}
+                className={`px-6 py-2 rounded-lg font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
+                  loading
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'
+                }`}
+              >
+                {loading ? 'Generating...' : 'Generate Quote'}
+              </button>
+            )}
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div className="bg-gray-50 p-4 rounded-lg">
