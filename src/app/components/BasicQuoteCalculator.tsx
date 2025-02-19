@@ -629,7 +629,7 @@ export default function PalletPricingTool() {
                         value={pallet.locationId}
                         onChange={(e) => handleInputChange(pallet.id, e)}
                         className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
-                          !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                          error && !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
                         }`}
                       >
                         <option value="">Select a location</option>
@@ -639,7 +639,7 @@ export default function PalletPricingTool() {
                           </option>
                         ))}
                       </select>
-                      {!pallet.locationId && (
+                      {error && !pallet.locationId && (
                         <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
                       )}
                     </div>
@@ -652,7 +652,7 @@ export default function PalletPricingTool() {
                         value={pallet.transportationType}
                         onChange={(e) => handleInputChange(pallet.id, e)}
                         className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
-                          !pallet.transportationType ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                          error && !pallet.transportationType ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
                         }`}
                         required
                       >
@@ -665,7 +665,7 @@ export default function PalletPricingTool() {
                           ))
                         }
                       </select>
-                      {!pallet.transportationType && (
+                      {error && !pallet.transportationType && (
                         <p className="text-sm text-red-500 mt-1">Transportation type is required</p>
                       )}
                     </div>

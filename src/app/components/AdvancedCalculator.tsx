@@ -483,7 +483,7 @@ export default function AdvancedCalculator() {
               value={pallet.locationId || ''}
               onChange={(e) => handlePalletChange(pallet.id, 'locationId', e.target.value)}
               className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
-                !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                error && !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
               }`}
             >
               <option value="">Select a location</option>
@@ -493,7 +493,7 @@ export default function AdvancedCalculator() {
                 </option>
               ))}
             </select>
-            {!pallet.locationId && (
+            {error && !pallet.locationId && (
               <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
             )}
           </div>
