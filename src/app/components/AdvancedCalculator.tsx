@@ -476,11 +476,15 @@ export default function AdvancedCalculator() {
             onChange={(text) => handlePalletChange(pallet.id, 'name', text)}
           />
           <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Shipping Location</label>
+            <label className="text-sm font-medium text-gray-700">
+              Shipping Location<span className="text-red-500">*</span>
+            </label>
             <select
               value={pallet.locationId || ''}
               onChange={(e) => handlePalletChange(pallet.id, 'locationId', e.target.value)}
-              className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
+                !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+              }`}
             >
               <option value="">Select a location</option>
               {locations.map(location => (
@@ -489,6 +493,9 @@ export default function AdvancedCalculator() {
                 </option>
               ))}
             </select>
+            {!pallet.locationId && (
+              <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
+            )}
           </div>
         </div>
         
@@ -565,20 +572,34 @@ export default function AdvancedCalculator() {
   };
 
   const handleCalculatePricing = () => {
+    // Check if all pallets have shipping locations
+    const missingLocations = pallets.some(pallet => !pallet.locationId);
+    if (missingLocations) {
+      setError('All pallets must have a shipping location selected');
+      return;
+    }
+    
     // For now, just recalculate the totals
-    // This will be expanded later with more complex pricing logic
     const components = calculateTotalComponents();
     const fasteners = calculateFasteners();
-    // You might want to store these results in state
+    setError(''); // Clear any previous errors
   };
 
   const handleGenerateQuote = async () => {
+    // Check if all pallets have shipping locations
+    const missingLocations = pallets.some(pallet => !pallet.locationId);
+    if (missingLocations) {
+      setError('All pallets must have a shipping location selected');
+      return;
+    }
+
     setLoading(true);
     try {
       // This will be implemented later with database functionality
       // For now, just show success message
       setTimeout(() => {
         setLoading(false);
+        setError(''); // Clear any previous errors
       }, 1000);
     } catch (error) {
       setError('Error generating quote');
