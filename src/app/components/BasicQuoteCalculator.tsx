@@ -10,6 +10,7 @@ interface FormData {
   palletName: string;
   locationId: string;
   palletsPerTruck: string;
+  transportationType: string;
   
   // Dimensions
   length: string;
@@ -54,6 +55,7 @@ const initialFormData: FormData = {
   palletName: '',
   locationId: '',
   palletsPerTruck: '0',
+  transportationType: '',
   length: '',
   width: '',
   boardFeet: '',
@@ -209,7 +211,7 @@ export default function PalletPricingTool() {
   const calculateTotalCost = (pallet: PalletData) => {
     if (!settings) return null;
 
-    const { lumberType, boardFeet, painted, notched, heatTreated, buildIntricacy, locationId, palletsPerTruck } = pallet;
+    const { lumberType, boardFeet, painted, notched, heatTreated, buildIntricacy, locationId, palletsPerTruck, transportationType } = pallet;
     const boardFeetNum = parseFloat(boardFeet);
     const palletsPerTruckNum = parseInt(palletsPerTruck) || 1;
 
@@ -232,7 +234,18 @@ export default function PalletPricingTool() {
 
     // Calculate transportation cost
     const location = locations.find(loc => loc.id === locationId);
-    const transportationCost = location ? (location.distance * settings.transportationCosts.perMileCharge) / palletsPerTruckNum : 0;
+    let transportationCost = 0;
+    
+    if (location && transportationType) {
+      // Get base delivery fee for the selected transportation type
+      const baseDeliveryFee = settings.transportationCosts.baseDeliveryFee[transportationType] || 0;
+      
+      // Calculate mileage cost
+      const mileageCost = location.distance * settings.transportationCosts.perMileCharge;
+      
+      // Total transportation cost = (base fee + mileage cost) / number of pallets
+      transportationCost = (baseDeliveryFee + mileageCost) / palletsPerTruckNum;
+    }
 
     // Calculate total cost and derived values
     const baseCost = Number((lumberCost + additionalCosts + intricacyCost).toFixed(2));
@@ -300,10 +313,17 @@ export default function PalletPricingTool() {
     e.preventDefault();
     setError('');
 
-    // Validate shipping locations
+    // Validate shipping locations and transportation types
     const missingLocations = pallets.some(pallet => !pallet.locationId);
+    const missingTransportation = pallets.some(pallet => !pallet.transportationType);
+    
     if (missingLocations) {
       setError('All pallets must have a shipping location selected');
+      return;
+    }
+    
+    if (missingTransportation) {
+      setError('All pallets must have a transportation type selected');
       return;
     }
 
@@ -326,10 +346,17 @@ export default function PalletPricingTool() {
   };
 
   const handleGenerateQuote = async () => {
-    // Validate shipping locations
+    // Validate shipping locations and transportation types
     const missingLocations = pallets.some(pallet => !pallet.locationId);
+    const missingTransportation = pallets.some(pallet => !pallet.transportationType);
+    
     if (missingLocations) {
       setError('All pallets must have a shipping location selected');
+      return;
+    }
+    
+    if (missingTransportation) {
+      setError('All pallets must have a transportation type selected');
       return;
     }
 
@@ -475,7 +502,33 @@ export default function PalletPricingTool() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Pallets Per Truck
+                      Transportation Type<span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="transportationType"
+                      value={pallet.transportationType}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
+                        !pallet.transportationType ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                      }`}
+                      required
+                    >
+                      <option value="">Select transportation type</option>
+                      {settings?.transportationCosts?.baseDeliveryFee && 
+                        Object.keys(settings.transportationCosts.baseDeliveryFee).map(type => (
+                          <option key={type} value={type}>
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </option>
+                        ))
+                      }
+                    </select>
+                    {!pallet.transportationType && (
+                      <p className="text-sm text-red-500 mt-1">Transportation type is required</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pallets Per Truck<span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
