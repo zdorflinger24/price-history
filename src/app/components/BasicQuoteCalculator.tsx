@@ -200,8 +200,9 @@ export default function PalletPricingTool() {
     };
   }, []);
 
+  // Load both settings and locations on mount
   useEffect(() => {
-    loadSettings();
+    loadSettingsAndLocations();
   }, []);
 
   useEffect(() => {
@@ -245,37 +246,58 @@ export default function PalletPricingTool() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [pallets, currentPalletId]);
 
-  useEffect(() => {
-    const storedLocations = localStorage.getItem('shippingLocations');
-    if (storedLocations) {
-      setLocations(JSON.parse(storedLocations));
-    }
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('shippingLocations', JSON.stringify(locations));
-  }, [locations]);
-
-  const loadSettings = async () => {
+  const loadSettingsAndLocations = async () => {
     if (!db) {
       setError('Database connection not available');
       return;
     }
 
     try {
-      const docRef = doc(db, 'global_pricing', 'current');
-      const docSnap = await getDoc(docRef);
+      // Load settings
+      const settingsRef = doc(db, 'global_pricing', 'current');
+      const settingsSnap = await getDoc(settingsRef);
       
-      if (docSnap.exists()) {
-        setSettings(docSnap.data() as GlobalSettings);
+      if (settingsSnap.exists()) {
+        setSettings(settingsSnap.data() as GlobalSettings);
       } else {
         setError('Global settings not found. Please configure settings first.');
       }
+
+      // Load locations from database
+      const locationsRef = doc(db, 'shipping_locations', 'current');
+      const locationsSnap = await getDoc(locationsRef);
+      
+      // Load locations from localStorage
+      const storedLocations = localStorage.getItem('shippingLocations');
+      const localLocations = storedLocations ? JSON.parse(storedLocations) : [];
+      
+      // Merge locations from database and localStorage
+      let allLocations: ShippingLocation[] = localLocations;
+      
+      if (locationsSnap.exists() && locationsSnap.data().locations) {
+        const dbLocations = locationsSnap.data().locations;
+        
+        // Merge locations, avoiding duplicates by ID
+        const locationMap = new Map();
+        [...localLocations, ...dbLocations].forEach(loc => {
+          locationMap.set(loc.id, loc);
+        });
+        
+        allLocations = Array.from(locationMap.values());
+      }
+      
+      setLocations(allLocations);
+      
     } catch (error) {
-      console.error('Error loading settings:', error);
-      setError('Error loading settings');
+      console.error('Error loading data:', error);
+      setError('Error loading settings and locations');
     }
   };
+
+  // Keep locations synced with localStorage
+  useEffect(() => {
+    localStorage.setItem('shippingLocations', JSON.stringify(locations));
+  }, [locations]);
 
   const handleInputChange = (palletId: string, e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -367,8 +389,28 @@ export default function PalletPricingTool() {
     };
   };
 
-  const handleAddLocation = (newLocation: ShippingLocation) => {
+  const handleAddLocation = async (newLocation: ShippingLocation) => {
     setLocations(prev => [...prev, newLocation]);
+    
+    // Also update the database immediately
+    if (db) {
+      try {
+        const locationsRef = doc(db, 'shipping_locations', 'current');
+        const locationsSnap = await getDoc(locationsRef);
+        
+        let existingLocations = [];
+        if (locationsSnap.exists() && locationsSnap.data().locations) {
+          existingLocations = locationsSnap.data().locations;
+        }
+        
+        await setDoc(locationsRef, {
+          locations: [...existingLocations, newLocation]
+        });
+      } catch (error) {
+        console.error('Error updating locations in database:', error);
+        // Don't show error to user since the location is still saved locally
+      }
+    }
   };
 
   const saveQuotes = async (pallets: PalletData[]) => {
