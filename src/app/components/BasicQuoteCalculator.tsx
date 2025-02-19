@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { doc, getDoc, addDoc, collection, serverTimestamp, setDoc, Firestore } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import type { GlobalSettings } from '@/lib/types';
+import { Plus } from 'lucide-react';
 
 interface FormData {
   // Basic Info
@@ -87,6 +88,97 @@ const noScrollbarStyles = `
   }
 `;
 
+interface AddLocationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (location: ShippingLocation) => void;
+}
+
+const AddLocationModal = ({ isOpen, onClose, onAdd }: AddLocationModalProps) => {
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [distance, setDistance] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onAdd({
+      id: `loc-${Math.random().toString(36).substr(2, 9)}`,
+      name,
+      address,
+      distance: parseFloat(distance)
+    });
+    setName('');
+    setAddress('');
+    setDistance('');
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <h3 className="text-lg font-medium mb-4">Add New Shipping Location</h3>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Location Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Address
+            </label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Distance (miles)
+            </label>
+            <input
+              type="number"
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              required
+              min="0"
+              step="0.1"
+            />
+          </div>
+          <div className="flex justify-end space-x-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 hover:text-gray-900"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Add Location
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 export default function PalletPricingTool() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [pallets, setPallets] = useState<PalletData[]>([createNewPallet()]);
@@ -96,6 +188,7 @@ export default function PalletPricingTool() {
   const [error, setError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [currentPalletId, setCurrentPalletId] = useState('');
+  const [isAddLocationModalOpen, setIsAddLocationModalOpen] = useState(false);
 
   // Add the styles to the document
   useEffect(() => {
@@ -158,6 +251,10 @@ export default function PalletPricingTool() {
       setLocations(JSON.parse(storedLocations));
     }
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem('shippingLocations', JSON.stringify(locations));
+  }, [locations]);
 
   const loadSettings = async () => {
     if (!db) {
@@ -270,6 +367,10 @@ export default function PalletPricingTool() {
     };
   };
 
+  const handleAddLocation = (newLocation: ShippingLocation) => {
+    setLocations(prev => [...prev, newLocation]);
+  };
+
   const saveQuotes = async (pallets: PalletData[]) => {
     if (!db) {
       setError('Database connection not available');
@@ -277,6 +378,11 @@ export default function PalletPricingTool() {
     }
 
     try {
+      // First, save the current locations to the database
+      const locationsRef = doc(db, 'shipping_locations', 'current');
+      await setDoc(locationsRef, { locations });
+
+      // Then save the quotes
       await Promise.all(pallets.map(async (pallet) => {
         if (!pallet.results) return;
 
@@ -480,9 +586,19 @@ export default function PalletPricingTool() {
                   {/* Shipping and Transportation Row */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Shipping Location<span className="text-red-500">*</span>
-                      </label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Shipping Location<span className="text-red-500">*</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddLocationModalOpen(true)}
+                          className="text-blue-600 hover:text-blue-700 p-1 rounded-full hover:bg-blue-50"
+                          title="Add New Location"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
                       <select
                         name="locationId"
                         value={pallet.locationId}
@@ -802,6 +918,12 @@ export default function PalletPricingTool() {
           Quotes saved successfully!
         </div>
       )}
+
+      <AddLocationModal
+        isOpen={isAddLocationModalOpen}
+        onClose={() => setIsAddLocationModalOpen(false)}
+        onAdd={handleAddLocation}
+      />
     </div>
   );
 } 
