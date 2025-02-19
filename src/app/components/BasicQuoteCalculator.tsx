@@ -9,6 +9,7 @@ interface FormData {
   // Basic Info
   palletName: string;
   locationId: string;
+  palletsPerTruck: string;
   
   // Dimensions
   length: string;
@@ -32,6 +33,8 @@ interface CalculationResults {
   profitMargin25: number;
   profitMargin30: number;
   profitMargin35: number;
+  transportationCost: number;
+  totalCostWithTransport: number;
 }
 
 // Add PalletData interface to extend FormData
@@ -50,6 +53,7 @@ interface ShippingLocation {
 const initialFormData: FormData = {
   palletName: '',
   locationId: '',
+  palletsPerTruck: '0',
   length: '',
   width: '',
   boardFeet: '',
@@ -205,8 +209,9 @@ export default function PalletPricingTool() {
   const calculateTotalCost = (pallet: PalletData) => {
     if (!settings) return null;
 
-    const { lumberType, boardFeet, painted, notched, heatTreated, buildIntricacy } = pallet;
+    const { lumberType, boardFeet, painted, notched, heatTreated, buildIntricacy, locationId, palletsPerTruck } = pallet;
     const boardFeetNum = parseFloat(boardFeet);
+    const palletsPerTruckNum = parseInt(palletsPerTruck) || 1;
 
     // Calculate lumber cost
     const lumberPrices = settings.lumberPrices[lumberType];
@@ -225,23 +230,30 @@ export default function PalletPricingTool() {
     // Calculate build intricacy cost
     const intricacyCost = settings.buildIntricacyCosts[buildIntricacy] || 0;
 
+    // Calculate transportation cost
+    const location = locations.find(loc => loc.id === locationId);
+    const transportationCost = location ? (location.distance * settings.transportationCosts.perMileCharge) / palletsPerTruckNum : 0;
+
     // Calculate total cost and derived values
-    const totalCost = Number((lumberCost + additionalCosts + intricacyCost).toFixed(2));
-    const costPerMBF = Number((totalCost / boardFeetNum * 1000).toFixed(2));
-    const walkawayPrice = Number((totalCost * 1.20).toFixed(2));
+    const baseCost = Number((lumberCost + additionalCosts + intricacyCost).toFixed(2));
+    const totalCostWithTransport = Number((baseCost + transportationCost).toFixed(2));
+    const costPerMBF = Number((baseCost / boardFeetNum * 1000).toFixed(2));
+    const walkawayPrice = Number((totalCostWithTransport * 1.20).toFixed(2));
     const pricePerBoardFoot = Number((walkawayPrice / boardFeetNum).toFixed(2));
-    const profitMargin25 = Number((totalCost * 1.25).toFixed(2));
-    const profitMargin30 = Number((totalCost * 1.30).toFixed(2));
-    const profitMargin35 = Number((totalCost * 1.35).toFixed(2));
+    const profitMargin25 = Number((totalCostWithTransport * 1.25).toFixed(2));
+    const profitMargin30 = Number((totalCostWithTransport * 1.30).toFixed(2));
+    const profitMargin35 = Number((totalCostWithTransport * 1.35).toFixed(2));
 
     return {
-      totalCost,
+      totalCost: baseCost,
       costPerMBF,
       walkawayPrice,
       pricePerBoardFoot,
       profitMargin25,
       profitMargin30,
-      profitMargin35
+      profitMargin35,
+      transportationCost,
+      totalCostWithTransport
     };
   };
 
@@ -461,6 +473,21 @@ export default function PalletPricingTool() {
                       <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
                     )}
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Pallets Per Truck
+                    </label>
+                    <input
+                      type="number"
+                      name="palletsPerTruck"
+                      placeholder="Enter number of pallets per truck"
+                      value={pallet.palletsPerTruck}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className={inputClassName}
+                      min="1"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -647,6 +674,14 @@ export default function PalletPricingTool() {
                               <span className="font-medium text-green-600">${pallet.results.profitMargin35.toFixed(2)}</span>
                             </div>
                           </div>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-t border-blue-100">
+                          <span className="text-gray-600">Transportation Cost:</span>
+                          <span className="font-medium text-blue-800">${pallet.results.transportationCost.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-blue-100">
+                          <span className="text-gray-600">Total Cost with Transportation:</span>
+                          <span className="text-lg font-semibold text-blue-900">${pallet.results.totalCostWithTransport.toFixed(2)}</span>
                         </div>
                       </div>
                     </div>
