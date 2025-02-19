@@ -477,54 +477,57 @@ export default function PalletPricingTool() {
                       required
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Shipping Location<span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="locationId"
-                      value={pallet.locationId}
-                      onChange={(e) => handleInputChange(pallet.id, e)}
-                      className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
-                        !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
-                      }`}
-                    >
-                      <option value="">Select a location</option>
-                      {locations.map(location => (
-                        <option key={location.id} value={location.id}>
-                          {location.name} ({location.distance} miles)
-                        </option>
-                      ))}
-                    </select>
-                    {!pallet.locationId && (
-                      <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Transportation Type<span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      name="transportationType"
-                      value={pallet.transportationType}
-                      onChange={(e) => handleInputChange(pallet.id, e)}
-                      className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
-                        !pallet.transportationType ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
-                      }`}
-                      required
-                    >
-                      <option value="">Select transportation type</option>
-                      {settings?.transportationCosts?.baseDeliveryFee && 
-                        Object.keys(settings.transportationCosts.baseDeliveryFee).map(type => (
-                          <option key={type} value={type}>
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                  {/* Shipping and Transportation Row */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Shipping Location<span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        name="locationId"
+                        value={pallet.locationId}
+                        onChange={(e) => handleInputChange(pallet.id, e)}
+                        className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
+                          !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                        }`}
+                      >
+                        <option value="">Select a location</option>
+                        {locations.map(location => (
+                          <option key={location.id} value={location.id}>
+                            {location.name} ({location.distance} miles)
                           </option>
-                        ))
-                      }
-                    </select>
-                    {!pallet.transportationType && (
-                      <p className="text-sm text-red-500 mt-1">Transportation type is required</p>
-                    )}
+                        ))}
+                      </select>
+                      {!pallet.locationId && (
+                        <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Transportation Type<span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        name="transportationType"
+                        value={pallet.transportationType}
+                        onChange={(e) => handleInputChange(pallet.id, e)}
+                        className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
+                          !pallet.transportationType ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                        }`}
+                        required
+                      >
+                        <option value="">Select transportation type</option>
+                        {settings?.transportationCosts?.baseDeliveryFee && 
+                          Object.keys(settings.transportationCosts.baseDeliveryFee).map(type => (
+                            <option key={type} value={type}>
+                              {type.charAt(0).toUpperCase() + type.slice(1)}
+                            </option>
+                          ))
+                        }
+                      </select>
+                      {!pallet.transportationType && (
+                        <p className="text-sm text-red-500 mt-1">Transportation type is required</p>
+                      )}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
