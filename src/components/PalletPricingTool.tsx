@@ -7,8 +7,6 @@ import type { GlobalSettings, LumberPrice } from '@/lib/types';
 
 interface FormData {
   // Basic Info
-  salesperson: string;
-  companyName: string;
   palletName: string;
   
   // Dimensions
@@ -48,9 +46,12 @@ interface CalculationResults {
   costPerPallet: number;
 }
 
+interface PalletData extends FormData {
+  id: string;
+  results: CalculationResults | null;
+}
+
 const initialFormData: FormData = {
-  salesperson: '',
-  companyName: '',
   palletName: '',
   length: '',
   width: '',
@@ -79,11 +80,18 @@ const defaultSettings: GlobalSettings = {
   vehicleDimensions: {}
 };
 
+const generateId = () => `pallet-${Math.random().toString(36).substr(2, 9)}`;
+
+const createNewPallet = (): PalletData => ({
+  id: generateId(),
+  ...initialFormData,
+  results: null
+});
+
 export default function PalletPricingTool() {
   const { db } = useFirebase();
-  const [formData, setFormData] = useState<FormData>(initialFormData);
+  const [pallets, setPallets] = useState<PalletData[]>([createNewPallet()]);
   const [settings, setSettings] = useState<GlobalSettings>(defaultSettings);
-  const [results, setResults] = useState<CalculationResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -116,31 +124,38 @@ export default function PalletPricingTool() {
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleInputChange = (palletId: string, e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     const newValue = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
     
-    setFormData(prev => ({
-      ...prev,
-      [name]: newValue
-    }));
+    setPallets(prev => prev.map(pallet => 
+      pallet.id === palletId 
+        ? { ...pallet, [name]: newValue, results: null }
+        : pallet
+    ));
 
-    // Clear results when form data changes
-    setResults(null);
     setError('');
     setSaveSuccess(false);
   };
 
-  const calculateBoardFootage = () => {
-    const lengthInFeet = parseFloat(formData.length) / 12;
-    const widthInFeet = parseFloat(formData.width) / 12;
+  const addPallet = () => {
+    setPallets(prev => [...prev, createNewPallet()]);
+  };
+
+  const removePallet = (palletId: string) => {
+    setPallets(prev => prev.filter(pallet => pallet.id !== palletId));
+  };
+
+  const calculateBoardFootage = (pallet: PalletData) => {
+    const lengthInFeet = parseFloat(pallet.length) / 12;
+    const widthInFeet = parseFloat(pallet.width) / 12;
     return lengthInFeet * widthInFeet * 1; // Assuming 1 inch thickness
   };
 
-  const calculatePallets = () => {
+  const calculatePallets = (pallet: PalletData) => {
     if (!settings) return { loadedLong: 0, loadedWide: 0, pinwheeled: 0 };
     
-    const { vehicleType, length, width } = formData;
+    const { vehicleType, length, width } = pallet;
     const palletLength = parseFloat(length);
     const palletWidth = parseFloat(width);
     const vehicleDims = settings.vehicleDimensions[vehicleType];
@@ -154,10 +169,10 @@ export default function PalletPricingTool() {
     return { loadedLong, loadedWide, pinwheeled };
   };
 
-  const calculateTotalCost = () => {
+  const calculateTotalCost = (pallet: PalletData) => {
     if (!settings) return null;
 
-    const { lumberType, boardFeet, painted, notched, heatTreated, buildIntricacy, vehicleType, distance } = formData;
+    const { lumberType, boardFeet, painted, notched, heatTreated, buildIntricacy, vehicleType, distance } = pallet;
     const boardFeetNum = parseFloat(boardFeet);
 
     // Calculate lumber cost
@@ -183,7 +198,7 @@ export default function PalletPricingTool() {
     const transportationCost = deliveryFee + (distanceNum * settings.transportationCosts.perMileCharge);
 
     // Calculate loading configurations
-    const loadingConfigurations = calculatePallets();
+    const loadingConfigurations = calculatePallets(pallet);
 
     // Calculate total cost and derived values
     const totalCost = lumberCost + additionalCosts + intricacyCost + transportationCost;
@@ -211,15 +226,15 @@ export default function PalletPricingTool() {
     };
   };
 
-  const saveQuote = async () => {
-    if (!results || !db) {
+  const saveQuote = async (pallet: PalletData, results: CalculationResults) => {
+    if (!db) {
       setError('Cannot save quote - database connection not available.');
       return;
     }
 
     try {
       const quoteData = {
-        ...formData,
+        ...pallet,
         ...results,
         timestamp: serverTimestamp(),
         globalPricingSnapshot: settings,
@@ -241,10 +256,20 @@ export default function PalletPricingTool() {
     setSaveSuccess(false);
 
     try {
-      const results = calculateTotalCost();
-      if (results) {
-        setResults(results);
-        await saveQuote();
+      const updatedPallets = pallets.map(pallet => ({
+        ...pallet,
+        results: calculateTotalCost(pallet)
+      }));
+
+      setPallets(updatedPallets);
+
+      // Save all pallets to the database
+      if (db) {
+        await Promise.all(updatedPallets.map(pallet => 
+          pallet.results && saveQuote(pallet, pallet.results)
+        ));
+        setSaveSuccess(true);
+        setTimeout(() => setSaveSuccess(false), 3000);
       }
     } catch (error) {
       setError('Error calculating results');
@@ -254,8 +279,7 @@ export default function PalletPricingTool() {
   };
 
   const handleReset = () => {
-    setFormData(initialFormData);
-    setResults(null);
+    setPallets([createNewPallet()]);
     setError('');
     setSaveSuccess(false);
   };
@@ -275,252 +299,302 @@ export default function PalletPricingTool() {
           <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
           </svg>
-          Quote saved successfully!
+          Quotes saved successfully!
         </div>
       )}
 
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-gray-900">Pallet Quotes</h2>
+        <button
+          type="button"
+          onClick={addPallet}
+          className="inline-flex items-center px-4 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+        >
+          <svg className="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Add Pallet
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Basic Info Section */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
-          </div>
-          <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Salesperson <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="salesperson"
-                  value={formData.salesperson}
-                  onChange={handleInputChange}
-                  className={`w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
-                    !formData.salesperson ? 'text-gray-500' : 'text-gray-900'
-                  }`}
-                  required
+        {pallets.map((pallet, index) => (
+          <div key={pallet.id} className="relative bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-medium text-gray-900">Pallet {index + 1}</h3>
+              {pallets.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removePallet(pallet.id)}
+                  className="text-red-600 hover:text-red-700 focus:outline-none"
                 >
-                  <option value="" disabled>Please select a salesperson</option>
-                  <option value="Billy">Billy</option>
-                  <option value="Brendan">Brendan</option>
-                  <option value="Zach">Zach</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Company Name
-                </label>
-                <input
-                  type="text"
-                  name="companyName"
-                  placeholder="Enter company name"
-                  value={formData.companyName}
-                  onChange={handleInputChange}
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pallet Name
-                </label>
-                <input
-                  type="text"
-                  name="palletName"
-                  placeholder="Enter pallet name"
-                  value={formData.palletName}
-                  onChange={handleInputChange}
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Dimensions Section */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Dimensions</h3>
-          </div>
-          <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Length (inches)
-                </label>
-                <input
-                  type="number"
-                  name="length"
-                  placeholder="Enter length"
-                  value={formData.length}
-                  onChange={handleInputChange}
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Width (inches)
-                </label>
-                <input
-                  type="number"
-                  name="width"
-                  placeholder="Enter width"
-                  value={formData.width}
-                  onChange={handleInputChange}
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Board Feet
-                </label>
-                <input
-                  type="number"
-                  name="boardFeet"
-                  placeholder="Enter board feet"
-                  value={formData.boardFeet}
-                  onChange={handleInputChange}
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Lumber Details Section */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Lumber Details</h3>
-          </div>
-          <div className="p-4 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Lumber Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="lumberType"
-                  value={formData.lumberType}
-                  onChange={handleInputChange}
-                  className={`w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
-                    !formData.lumberType ? 'text-gray-500' : 'text-gray-900'
-                  }`}
-                  required
-                >
-                  <option value="" disabled>Select lumber type</option>
-                  {Object.keys(settings.lumberPrices).map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Build Intricacy <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="buildIntricacy"
-                  value={formData.buildIntricacy}
-                  onChange={handleInputChange}
-                  className={`w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
-                    !formData.buildIntricacy ? 'text-gray-500' : 'text-gray-900'
-                  }`}
-                  required
-                >
-                  <option value="" disabled>Select build complexity</option>
-                  {Object.keys(settings.buildIntricacyCosts).map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              )}
             </div>
 
-            <div className="border-t border-gray-200 pt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Additional Options
-              </label>
-              <div className="flex flex-wrap gap-6">
-                <label className="flex items-center space-x-2">
+            {/* Basic Info Section */}
+            <div className="p-4">
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pallet Name <span className="text-red-500">*</span>
+                  </label>
                   <input
-                    type="checkbox"
-                    name="heatTreated"
-                    checked={formData.heatTreated}
-                    onChange={handleInputChange}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    type="text"
+                    name="palletName"
+                    placeholder="Enter a name to identify this pallet (e.g. Standard 48x40)"
+                    value={pallet.palletName}
+                    onChange={(e) => handleInputChange(pallet.id, e)}
+                    className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    required
                   />
-                  <span className="text-sm text-gray-700">Heat Treated</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    name="notched"
-                    checked={formData.notched}
-                    onChange={handleInputChange}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">Notched</span>
-                </label>
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    name="painted"
-                    checked={formData.painted}
-                    onChange={handleInputChange}
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <span className="text-sm text-gray-700">Painted</span>
-                </label>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Transportation Section */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">Transportation</h3>
-          </div>
-          <div className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vehicle Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="vehicleType"
-                  value={formData.vehicleType}
-                  onChange={handleInputChange}
-                  className={`w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
-                    !formData.vehicleType ? 'text-gray-500' : 'text-gray-900'
-                  }`}
-                  required
-                >
-                  <option value="" disabled>Select vehicle type</option>
-                  {Object.keys(settings.transportationCosts.baseDeliveryFee).map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
+            {/* Dimensions Section */}
+            <div className="border-t border-gray-200">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">Dimensions</h3>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Distance (miles)
-                </label>
-                <input
-                  type="number"
-                  name="distance"
-                  placeholder="Enter distance"
-                  value={formData.distance}
-                  onChange={handleInputChange}
-                  className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  required
-                />
+              <div className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Length (inches)
+                    </label>
+                    <input
+                      type="number"
+                      name="length"
+                      placeholder="Enter length"
+                      value={pallet.length}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Width (inches)
+                    </label>
+                    <input
+                      type="number"
+                      name="width"
+                      placeholder="Enter width"
+                      value={pallet.width}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Board Feet
+                    </label>
+                    <input
+                      type="number"
+                      name="boardFeet"
+                      placeholder="Enter board feet"
+                      value={pallet.boardFeet}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
               </div>
             </div>
+
+            {/* Lumber Details Section */}
+            <div className="border-t border-gray-200">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">Lumber Details</h3>
+              </div>
+              <div className="p-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Lumber Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="lumberType"
+                      value={pallet.lumberType}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className={`w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+                        !pallet.lumberType ? 'text-gray-500' : 'text-gray-900'
+                      }`}
+                      required
+                    >
+                      <option value="" disabled>Select lumber type</option>
+                      {Object.keys(settings.lumberPrices).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Build Intricacy <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="buildIntricacy"
+                      value={pallet.buildIntricacy}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className={`w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+                        !pallet.buildIntricacy ? 'text-gray-500' : 'text-gray-900'
+                      }`}
+                      required
+                    >
+                      <option value="" disabled>Select build complexity</option>
+                      {Object.keys(settings.buildIntricacyCosts).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 pt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Additional Options
+                  </label>
+                  <div className="flex flex-wrap gap-6">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        name="heatTreated"
+                        checked={pallet.heatTreated}
+                        onChange={(e) => handleInputChange(pallet.id, e)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Heat Treated</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        name="notched"
+                        checked={pallet.notched}
+                        onChange={(e) => handleInputChange(pallet.id, e)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Notched</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        name="painted"
+                        checked={pallet.painted}
+                        onChange={(e) => handleInputChange(pallet.id, e)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">Painted</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Transportation Section */}
+            <div className="border-t border-gray-200">
+              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">Transportation</h3>
+              </div>
+              <div className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Vehicle Type <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      name="vehicleType"
+                      value={pallet.vehicleType}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className={`w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${
+                        !pallet.vehicleType ? 'text-gray-500' : 'text-gray-900'
+                      }`}
+                      required
+                    >
+                      <option value="" disabled>Select vehicle type</option>
+                      {Object.keys(settings.transportationCosts.baseDeliveryFee).map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Distance (miles)
+                    </label>
+                    <input
+                      type="number"
+                      name="distance"
+                      placeholder="Enter distance"
+                      value={pallet.distance}
+                      onChange={(e) => handleInputChange(pallet.id, e)}
+                      className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Results Section */}
+            {pallet.results && (
+              <div className="border-t border-gray-200">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900">Results</h3>
+                </div>
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Pricing Results */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-gray-900">Pricing</h4>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Total Cost:</span>
+                        <span className="font-medium">${pallet.results.totalCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Walkaway Price:</span>
+                        <span className="font-medium text-blue-600">${pallet.results.walkawayPrice.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Transportation Results */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-gray-900">Transportation</h4>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Cost:</span>
+                        <span className="font-medium">${pallet.results.transportationCost.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Per Pallet:</span>
+                        <span className="font-medium">${pallet.results.costPerPallet.toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* Loading Configurations */}
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-gray-900">Loading</h4>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Long:</span>
+                        <span className="font-medium">{pallet.results.loadingConfigurations.loadedLong}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Wide:</span>
+                        <span className="font-medium">{pallet.results.loadingConfigurations.loadedWide}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Pinwheel:</span>
+                        <span className="font-medium">{pallet.results.loadingConfigurations.pinwheeled}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        ))}
 
         {/* Form Actions */}
         <div className="flex justify-end space-x-4">
@@ -540,7 +614,7 @@ export default function PalletPricingTool() {
                 : 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500'
             }`}
           >
-            {loading ? 'Calculating...' : 'Calculate'}
+            {loading ? 'Calculating...' : 'Calculate All'}
           </button>
         </div>
       </form>
@@ -551,89 +625,6 @@ export default function PalletPricingTool() {
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
           </svg>
           {error}
-        </div>
-      )}
-
-      {results && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Pricing Results */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">Pricing Results</h3>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Total Cost:</span>
-                  <span className="font-medium">${results.totalCost.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Cost per MBF:</span>
-                  <span className="font-medium">${(results.costPerBoardFoot * 1000).toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1 border-t border-gray-200">
-                  <span className="text-gray-600">Walkaway Price:</span>
-                  <span className="font-medium text-blue-600">${results.walkawayPrice.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Price per MBF:</span>
-                  <span className="font-medium">${(results.pricePerBoardFoot * 1000).toFixed(2)}</span>
-                </div>
-                <div className="border-t border-gray-200 pt-2 mt-2">
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-gray-600">20% Margin:</span>
-                    <span className="font-medium">${results.profitMargin20.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-gray-600">25% Margin:</span>
-                    <span className="font-medium">${results.profitMargin25.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-gray-600">30% Margin:</span>
-                    <span className="font-medium">${results.profitMargin30.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Transportation Results */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">Transportation Results</h3>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Transportation Cost:</span>
-                  <span className="font-medium">${results.transportationCost.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Cost per Pallet:</span>
-                  <span className="font-medium">${results.costPerPallet.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Loading Configurations */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">Loading Configurations</h3>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Loaded Long:</span>
-                  <span className="font-medium">{results.loadingConfigurations.loadedLong}</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Loaded Wide:</span>
-                  <span className="font-medium">{results.loadingConfigurations.loadedWide}</span>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-gray-600">Pinwheeled:</span>
-                  <span className="font-medium">{results.loadingConfigurations.pinwheeled}</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>

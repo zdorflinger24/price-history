@@ -42,9 +42,12 @@ interface PalletComponents {
   id: string;
   name: string;
   locationId: string | null;
+  transportationType: string;
+  palletsPerTruck: number;
   deckBoards: BoardDimensions[];
   leadBoards: BoardDimensions[];
   stringers: StringerDimensions[];
+  fastenerType: string;
   results: any | null;
 }
 
@@ -80,9 +83,12 @@ const createNewPallet = (): PalletComponents => ({
   id: generateId(),
   name: '',
   locationId: null,
+  transportationType: '',
+  palletsPerTruck: 0,
   deckBoards: [createBoard('board')],
   leadBoards: [createBoard('board')],
   stringers: [createStringer()],
+  fastenerType: 'Standard',
   results: null
 });
 
@@ -139,9 +145,13 @@ export default function AdvancedCalculator() {
   const [painted, setPainted] = useState<boolean>(false);
   const [notched, setNotched] = useState<boolean>(false);
   const [heatTreated, setHeatTreated] = useState<boolean>(false);
+  const [bands, setBands] = useState<boolean>(false);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
+  const [laborBuildPrice, setLaborBuildPrice] = useState<number>(0);
   const [activePalletId, setActivePalletId] = useState(pallets[0]?.id);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isAddLocationModalOpen, setIsAddLocationModalOpen] = useState(false);
+  const [newLocation, setNewLocation] = useState({ name: '', address: '', distance: '' });
 
   useEffect(() => {
     const loadData = async () => {
@@ -246,7 +256,15 @@ export default function AdvancedCalculator() {
     ));
   };
 
-  const handlePalletChange = (palletId: string, field: keyof Pick<PalletComponents, 'name' | 'locationId'>, value: string) => {
+  const handlePalletChange = (palletId: string, field: keyof Pick<PalletComponents, 'name' | 'locationId' | 'transportationType' | 'fastenerType'>, value: string) => {
+    setPallets(prev => prev.map(pallet =>
+      pallet.id === palletId
+        ? { ...pallet, [field]: value }
+        : pallet
+    ));
+  };
+
+  const handlePalletNumberChange = (palletId: string, field: 'palletsPerTruck', value: number) => {
     setPallets(prev => prev.map(pallet =>
       pallet.id === palletId
         ? { ...pallet, [field]: value }
@@ -324,18 +342,18 @@ export default function AdvancedCalculator() {
     const handleBlur = () => {
       setIsFocused(false);
       if (localValue === '' || localValue === '.') {
-        setLocalValue(isCount ? '0' : '0.00');
+        setLocalValue(isCount ? '0' : '0.0000');
         onChange(0);
         return;
       }
 
       const num = parseFloat(localValue);
       if (!isNaN(num)) {
-        const formatted = isCount ? Math.floor(num).toString() : num.toFixed(2);
+        const formatted = isCount ? Math.floor(num).toString() : num.toFixed(4);
         setLocalValue(formatted);
         onChange(isCount ? Math.floor(num) : num);
       } else {
-        setLocalValue(isCount ? '0' : '0.00');
+        setLocalValue(isCount ? '0' : '0.0000');
         onChange(0);
       }
     };
@@ -353,6 +371,7 @@ export default function AdvancedCalculator() {
           onBlur={handleBlur}
           className="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
           placeholder={isCount ? "Enter count" : "Enter measurement"}
+          step={isCount ? "1" : "0.0001"}
         />
       </div>
     );
@@ -368,7 +387,11 @@ export default function AdvancedCalculator() {
     onUpdate: (field: string, value: number | string) => void;
     onRemove: () => void;
     isStringer: boolean;
-  }) => (
+  }) => {
+    const isGreenPine = dimensions.lumberType === 'Green Pine';
+    const isBoard = !isStringer;
+
+    return (
     <div className="flex flex-col space-y-1 bg-white p-2">
       <InputField
         label="Count #"
@@ -382,18 +405,46 @@ export default function AdvancedCalculator() {
           value={(dimensions as StringerDimensions).height}
           onChange={(value) => onUpdate('height', value)}
         />
-      ) : (
+      ) : isGreenPine ? (
         <InputField
           label="Thickness (in)"
           value={(dimensions as BoardDimensions).thickness}
           onChange={(value) => onUpdate('thickness', value)}
         />
+      ) : (
+        <div className="flex flex-col space-y-1">
+          <label className="text-sm font-medium text-gray-700">Thickness (in)</label>
+          <select
+            value={(dimensions as BoardDimensions).thickness}
+            onChange={(e) => onUpdate('thickness', parseFloat(e.target.value))}
+            className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
+          >
+            <option value="0.438">0.438"</option>
+            <option value="0.688">0.688"</option>
+          </select>
+        </div>
       )}
-      <InputField
-        label="Width (in)"
-        value={dimensions.width}
-        onChange={(value) => onUpdate('width', value)}
-      />
+      
+      {isGreenPine || isStringer ? (
+        <InputField
+          label="Width (in)"
+          value={dimensions.width}
+          onChange={(value) => onUpdate('width', value)}
+        />
+      ) : (
+        <div className="flex flex-col space-y-1">
+          <label className="text-sm font-medium text-gray-700">Width (in)</label>
+          <select
+            value={dimensions.width}
+            onChange={(e) => onUpdate('width', parseFloat(e.target.value))}
+            className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
+          >
+            <option value="3.5">3.5"</option>
+            <option value="5.5">5.5"</option>
+          </select>
+        </div>
+      )}
+      
       <InputField
         label="Length (in)"
         value={dimensions.length}
@@ -424,7 +475,7 @@ export default function AdvancedCalculator() {
         </select>
       </div>
     </div>
-  );
+  )};
 
   const ComponentSection = ({ 
     title, 
@@ -464,6 +515,35 @@ export default function AdvancedCalculator() {
     );
   };
 
+  const handleAddLocation = async (newLocation: ShippingLocation) => {
+    setLocations(prev => [...prev, newLocation]);
+    
+    // Save to localStorage
+    const updatedLocations = [...locations, newLocation];
+    localStorage.setItem('shippingLocations', JSON.stringify(updatedLocations));
+  };
+
+  const calculateFastenerCost = () => {
+    const components = calculateTotalComponents();
+    const fastenerCount = calculateFasteners();
+    
+    // Default costs if settings are not available
+    const fastenerCosts = {
+      Standard: settings?.fastenerCosts?.standard || 0.0046,
+      'Automatic Nail': settings?.fastenerCosts?.automatic || 0.0065,
+      'Specialty Nail': settings?.fastenerCosts?.specialty || 0.01
+    };
+    
+    // Calculate cost based on fastener type for each pallet
+    return pallets.reduce((total, pallet) => {
+      const palletFastenerCount = (pallet.deckBoards.reduce((sum, board) => sum + board.count, 0) + 
+                                 pallet.leadBoards.reduce((sum, board) => sum + board.count, 0)) * 
+                                 pallet.stringers.reduce((sum, stringer) => sum + stringer.count, 0) * 2;
+      
+      return total + (palletFastenerCount * fastenerCosts[pallet.fastenerType as keyof typeof fastenerCosts]);
+    }, 0);
+  };
+
   const PalletSection = ({ pallet }: { pallet: PalletComponents }) => {
     const totalBoardFeet = calculatePalletBoardFeet(pallet);
 
@@ -475,27 +555,89 @@ export default function AdvancedCalculator() {
             value={pallet.name}
             onChange={(text) => handlePalletChange(pallet.id, 'name', text)}
           />
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">
-              Shipping Location<span className="text-red-500">*</span>
-            </label>
-            <select
-              value={pallet.locationId || ''}
-              onChange={(e) => handlePalletChange(pallet.id, 'locationId', e.target.value)}
-              className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
-                error && !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
-              }`}
-            >
-              <option value="">Select a location</option>
-              {locations.map(location => (
-                <option key={location.id} value={location.id}>
-                  {location.name} ({location.distance} miles)
-                </option>
-              ))}
-            </select>
-            {error && !pallet.locationId && (
-              <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
-            )}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex flex-col space-y-1">
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-sm font-medium text-gray-700">
+                  Shipping Location<span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setIsAddLocationModalOpen(true)}
+                  className="text-blue-600 hover:text-blue-700 p-1 rounded-full hover:bg-blue-50"
+                  title="Add New Location"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              </div>
+              <select
+                value={pallet.locationId || ''}
+                onChange={(e) => handlePalletChange(pallet.id, 'locationId', e.target.value)}
+                className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
+                  error && !pallet.locationId ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                }`}
+              >
+                <option value="">Select a location</option>
+                {locations.map(location => (
+                  <option key={location.id} value={location.id}>
+                    {location.name} ({location.distance} miles)
+                  </option>
+                ))}
+              </select>
+              {error && !pallet.locationId && (
+                <p className="text-sm text-red-500 mt-1">Shipping location is required</p>
+              )}
+            </div>
+            
+            <div className="flex flex-col space-y-1">
+              <label className="text-sm font-medium text-gray-700">
+                Transportation Type<span className="text-red-500">*</span>
+              </label>
+              <select
+                value={pallet.transportationType}
+                onChange={(e) => handlePalletChange(pallet.id, 'transportationType', e.target.value)}
+                className={`w-full px-3 py-1.5 bg-gray-50 border rounded-lg shadow-sm focus:ring-1 focus:ring-blue-500 ${
+                  error && !pallet.transportationType ? 'border-red-500' : 'border-gray-300 focus:border-blue-500'
+                }`}
+              >
+                <option value="">Select transportation type</option>
+                {settings?.transportationCosts?.baseDeliveryFee && 
+                  Object.keys(settings.transportationCosts.baseDeliveryFee).map(type => (
+                    <option key={type} value={type}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </option>
+                  ))
+                }
+              </select>
+              {error && !pallet.transportationType && (
+                <p className="text-sm text-red-500 mt-1">Transportation type is required</p>
+              )}
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <InputField
+              label="Pallets Per Truck"
+              value={pallet.palletsPerTruck}
+              onChange={(value) => handlePalletNumberChange(pallet.id, 'palletsPerTruck', value)}
+              isCount={true}
+            />
+            
+            <div className="flex flex-col space-y-1">
+              <label className="text-sm font-medium text-gray-700">
+                Fastener Type
+              </label>
+              <select
+                value={pallet.fastenerType}
+                onChange={(e) => handlePalletChange(pallet.id, 'fastenerType', e.target.value)}
+                className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="Standard">Standard</option>
+                <option value="Automatic Nail">Automatic Nail</option>
+                <option value="Specialty Nail">Specialty Nail</option>
+              </select>
+            </div>
           </div>
         </div>
         
@@ -673,6 +815,69 @@ export default function AdvancedCalculator() {
         ))}
       </div>
 
+      {/* Additional Options Section */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Options</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-4">
+              <label className="flex items-center space-x-2 bg-gray-50 px-4 py-2 rounded-lg">
+                <input 
+                  type="checkbox" 
+                  checked={painted} 
+                  onChange={e => setPainted(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500" 
+                />
+                <span>Painted</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-50 px-4 py-2 rounded-lg">
+                <input 
+                  type="checkbox" 
+                  checked={notched} 
+                  onChange={e => setNotched(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500" 
+                />
+                <span>Notched</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-50 px-4 py-2 rounded-lg">
+                <input 
+                  type="checkbox" 
+                  checked={heatTreated} 
+                  onChange={e => setHeatTreated(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500" 
+                />
+                <span>Heat Treated</span>
+              </label>
+              <label className="flex items-center space-x-2 bg-gray-50 px-4 py-2 rounded-lg">
+                <input 
+                  type="checkbox" 
+                  checked={bands} 
+                  onChange={e => setBands(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 rounded focus:ring-blue-500" 
+                />
+                <span>Bands</span>
+              </label>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="flex flex-col space-y-1">
+              <label className="text-sm font-medium text-gray-700">Labor - Build Price ($)</label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={laborBuildPrice}
+                  onChange={e => setLaborBuildPrice(Number(e.target.value))}
+                  className="w-full pl-8 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg border border-gray-200 p-6 mt-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">Advanced Pricing Summary</h2>
@@ -727,24 +932,10 @@ export default function AdvancedCalculator() {
                   <span>Total Fasteners Required:</span>
                   <span className="font-medium">{calculateFasteners()}</span>
                 </div>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg">
-              <h3 className="font-semibold mb-2">Additional Options</h3>
-              <div className="space-y-2">
-                <label className="flex items-center">
-                  <input type="checkbox" checked={painted} onChange={e => setPainted(e.target.checked)} className="mr-2" />
-                  <span>Painted (+75%)</span>
-                </label>
-                <label className="flex items-center">
-                  <input type="checkbox" checked={notched} onChange={e => setNotched(e.target.checked)} className="mr-2" />
-                  <span>Notched (+85%)</span>
-                </label>
-                <label className="flex items-center">
-                  <input type="checkbox" checked={heatTreated} onChange={e => setHeatTreated(e.target.checked)} className="mr-2" />
-                  <span>Heat Treated (+100%)</span>
-                </label>
+                <div className="flex justify-between">
+                  <span>Fastener Cost:</span>
+                  <span className="font-medium">${calculateFastenerCost().toFixed(2)}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -755,12 +946,15 @@ export default function AdvancedCalculator() {
               <div className="space-y-2">
                 <div>
                   <label className="block text-sm mb-1">Delivery Fee ($)</label>
-                  <input
-                    type="number"
-                    value={deliveryFee}
-                    onChange={e => setDeliveryFee(Number(e.target.value))}
-                    className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                  />
+                  <div className="relative">
+                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                    <input
+                      type="number"
+                      value={deliveryFee}
+                      onChange={e => setDeliveryFee(Number(e.target.value))}
+                      className="w-full pl-8 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -775,22 +969,101 @@ export default function AdvancedCalculator() {
                 <div className="flex justify-between">
                   <span>Additional Options Cost:</span>
                   <span className="font-medium">
-                    +{((painted ? 75 : 0) + (notched ? 85 : 0) + (heatTreated ? 100 : 0))}%
+                    +{((painted ? 75 : 0) + (notched ? 85 : 0) + (heatTreated ? 100 : 0) + (bands ? 10 : 0))}%
                   </span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Labor - Build Price:</span>
+                  <span className="font-medium">${laborBuildPrice.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span>Total Delivered Cost:</span>
-                  <span className="font-medium">${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0)) + deliveryFee).toFixed(2)}</span>
+                  <span className="font-medium">${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0) + (bands ? 0.10 : 0)) + deliveryFee + laborBuildPrice).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-blue-600 font-semibold">
                   <span>30% Net Revenue Price:</span>
-                  <span>${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0)) * 1.3 + deliveryFee).toFixed(2)}</span>
+                  <span>${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0) + (bands ? 0.10 : 0)) * 1.3 + deliveryFee + laborBuildPrice).toFixed(2)}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
       </div>
+      
+      {/* Add Location Modal */}
+      {isAddLocationModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-medium mb-4">Add New Shipping Location</h3>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const newLoc = {
+                id: `loc-${Math.random().toString(36).substr(2, 9)}`,
+                name: newLocation.name,
+                address: newLocation.address,
+                distance: Number(newLocation.distance)
+              };
+              handleAddLocation(newLoc);
+              setNewLocation({ name: '', address: '', distance: '' });
+              setIsAddLocationModalOpen(false);
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location Name
+                </label>
+                <input
+                  type="text"
+                  value={newLocation.name}
+                  onChange={(e) => setNewLocation(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  value={newLocation.address}
+                  onChange={(e) => setNewLocation(prev => ({ ...prev, address: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Distance (miles)
+                </label>
+                <input
+                  type="number"
+                  value={newLocation.distance}
+                  onChange={(e) => setNewLocation(prev => ({ ...prev, distance: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                  min="0"
+                  step="0.1"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setIsAddLocationModalOpen(false)}
+                  className="px-4 py-2 text-gray-700 hover:text-gray-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  Add Location
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

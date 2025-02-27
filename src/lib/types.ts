@@ -30,6 +30,12 @@ export interface GlobalSettings {
   vehicleDimensions: {
     [key: string]: VehicleDimensions;
   };
+  fastenerCosts?: {
+    standard: number;
+    automatic: number;
+    specialty: number;
+  };
+  lumberProcessingCost?: number;
 }
 
 export interface QuoteData {

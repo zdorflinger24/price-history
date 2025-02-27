@@ -23,6 +23,7 @@ interface FormData {
   heatTreated: boolean;
   notched: boolean;
   painted: boolean;
+  bands: boolean;
   buildIntricacy: string;
 }
 
@@ -64,6 +65,7 @@ const initialFormData: FormData = {
   heatTreated: false,
   notched: false,
   painted: false,
+  bands: false,
   buildIntricacy: '',
 };
 
@@ -329,7 +331,7 @@ export default function PalletPricingTool() {
   const calculateTotalCost = (pallet: PalletData) => {
     if (!settings) return null;
 
-    const { lumberType, boardFeet, painted, notched, heatTreated, buildIntricacy, locationId, palletsPerTruck, transportationType } = pallet;
+    const { lumberType, boardFeet, painted, notched, heatTreated, bands, buildIntricacy, locationId, palletsPerTruck, transportationType } = pallet;
     const boardFeetNum = parseFloat(boardFeet);
     const palletsPerTruckNum = parseInt(palletsPerTruck) || 1;
 
@@ -345,7 +347,8 @@ export default function PalletPricingTool() {
     const additionalCosts = 
       (painted ? settings.additionalCosts.painted : 0) +
       (notched ? settings.additionalCosts.notched : 0) +
-      (heatTreated ? settings.additionalCosts.heatTreated : 0);
+      (heatTreated ? settings.additionalCosts.heatTreated : 0) +
+      (bands ? settings.additionalCosts.bands : 0);
 
     // Calculate build intricacy cost
     const intricacyCost = settings.buildIntricacyCosts[buildIntricacy] || 0;
@@ -821,6 +824,19 @@ export default function PalletPricingTool() {
                       />
                       <label htmlFor="painted" className="text-sm text-gray-700">
                         Painted
+                      </label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="bands"
+                        name="bands"
+                        checked={pallet.bands}
+                        onChange={(e) => handleInputChange(pallet.id, e)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor="bands" className="text-sm text-gray-700">
+                        Bands
                       </label>
                     </div>
                   </div>

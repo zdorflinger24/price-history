@@ -19,6 +19,16 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'Pallet Pricing Calculator',
   description: 'Calculate pallet prices with ease',
+  icons: [
+    {
+      rel: 'icon',
+      url: '/S5.png',
+    },
+    {
+      rel: 'apple-touch-icon',
+      url: '/S5.png',
+    }
+  ]
 };
 
 export default function RootLayout({
@@ -29,7 +39,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={montserrat.variable} style={({ "--ro-scrollbar-height": "0px" } as unknown) as React.CSSProperties}>
       <head>
-        {/* ... existing code ... */}
+        <link rel="icon" href="/S5.png" sizes="any" />
+        <link rel="apple-touch-icon" href="/S5.png" />
       </head>
       <body className={montserrat.className}>
         <FirebaseProvider>

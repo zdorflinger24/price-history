@@ -8,15 +8,14 @@ import { Calculator, Settings as SettingsIcon, BarChart2, Truck } from 'lucide-r
 import dynamic from 'next/dynamic';
 import AbacusIcon from "@/app/components/AbacusIcon";
 
-const QuotesPage = dynamic(() => import("@/app/general-quote-information/page"), { ssr: false });
+const QuotesPage = dynamic(() => import("@/app/components/GeneralQuoteInformation"), { ssr: false });
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('quotes');
 
   return (
     <main className="container mx-auto px-4 py-8">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Pallet Quote Manager</h1>
+      <div className="flex justify-end mb-8">
         <div className="flex space-x-4">
           <button
             onClick={() => setActiveTab('quotes')}

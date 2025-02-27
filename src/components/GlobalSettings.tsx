@@ -20,7 +20,8 @@ const defaultSettings: GlobalSettings = {
   additionalCosts: {
     painted: 0.75,
     notched: 0.85,
-    heatTreated: 1
+    heatTreated: 1,
+    bands: 0.10
   },
   transportationCosts: {
     baseDeliveryFee: {
@@ -34,7 +35,13 @@ const defaultSettings: GlobalSettings = {
     'Truck': { length: 408, width: 96, height: 96, maxWeight: 10000 },
     'Dry Van': { length: 636, width: 102, height: 110, maxWeight: 45000 },
     'Flatbed': { length: 636, width: 102, height: 0, maxWeight: 48000 }
-  }
+  },
+  fastenerCosts: {
+    standard: 0.0046,
+    automatic: 0.0065,
+    specialty: 0.01
+  },
+  lumberProcessingCost: 0.05
 };
 
 function GlobalSettingsContent() {
@@ -139,6 +146,10 @@ function GlobalSettingsContent() {
         newSettings.buildIntricacyCosts[key] = value;
       } else if (section === 'additionalCosts') {
         (newSettings.additionalCosts as any)[key] = value;
+      } else if (section === 'fastenerCosts') {
+        (newSettings.fastenerCosts as any)[key] = value;
+      } else if (section === 'lumberProcessingCost') {
+        newSettings.lumberProcessingCost = value;
       }
       return newSettings;
     });
@@ -205,25 +216,48 @@ function GlobalSettingsContent() {
           <h3 className="text-lg font-medium text-gray-900">Lumber Prices</h3>
         </div>
         <div className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Object.entries(settings.lumberPrices).map(([type, prices]) => (
-              <div key={type} className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-medium text-gray-900 mb-3">{type}</h4>
-                <div className="space-y-2">
-                  {Object.entries(prices).map(([key, value]) => (
-                    <div key={key} className="flex items-center space-x-2">
-                      <label className="w-20 text-sm text-gray-600">{key.toUpperCase()}:</label>
-                      <input
-                        type="number"
-                        value={value}
-                        onChange={(e) => handleChange('lumberPrices', type, key, Number(e.target.value))}
-                        className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                      />
-                    </div>
-                  ))}
+          <div className="grid grid-cols-1 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Object.entries(settings.lumberPrices).map(([type, prices]) => (
+                <div key={type} className="bg-gray-50 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3">{type}</h4>
+                  <div className="space-y-2">
+                    {Object.entries(prices).map(([key, value]) => (
+                      <div key={key} className="flex items-center space-x-2">
+                        <label className="w-32 text-sm text-gray-600">{key === 'c' ? 'Price per MBF:' : key.toUpperCase() + ':'}</label>
+                        <div className="relative w-full">
+                          <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                          <input
+                            type="number"
+                            value={value}
+                            onChange={(e) => handleChange('lumberPrices', type, key, Number(e.target.value))}
+                            className="w-full pl-8 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                            step="0.0001"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="bg-gray-50 rounded-lg p-4 mt-4">
+              <h4 className="font-medium text-gray-900 mb-3">Lumber Processing</h4>
+              <div className="flex items-center space-x-2">
+                <label className="w-32 text-sm text-gray-600">Cost per piece:</label>
+                <div className="relative w-full">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                  <input
+                    type="number"
+                    value={settings.lumberProcessingCost || 0.05}
+                    onChange={(e) => handleChange('lumberProcessingCost', '', '', Number(e.target.value))}
+                    className="w-full pl-8 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    step="0.0001"
+                  />
                 </div>
               </div>
-            ))}
+            </div>
           </div>
         </div>
       </div>
@@ -260,7 +294,7 @@ function GlobalSettingsContent() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {Object.entries(settings.additionalCosts).map(([key, value]) => (
               <div key={key} className="flex items-center space-x-2">
-                <label className="w-32 text-sm text-gray-600 capitalize">{key}:</label>
+                <label className="w-32 text-sm text-gray-600">{key.charAt(0).toUpperCase() + key.slice(1)}:</label>
                 <input
                   type="number"
                   value={value}
@@ -270,6 +304,56 @@ function GlobalSettingsContent() {
                 />
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Fastener Costs Section */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">Fastener Costs</h3>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="flex items-center space-x-2">
+              <label className="w-32 text-sm text-gray-600">Standard Nail:</label>
+              <div className="relative w-full">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={settings.fastenerCosts?.standard || 0.0046}
+                  onChange={(e) => handleChange('fastenerCosts', 'standard', '', Number(e.target.value))}
+                  className="w-full pl-8 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  step="0.0001"
+                />
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="w-32 text-sm text-gray-600">Automatic Nail:</label>
+              <div className="relative w-full">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={settings.fastenerCosts?.automatic || 0.0065}
+                  onChange={(e) => handleChange('fastenerCosts', 'automatic', '', Number(e.target.value))}
+                  className="w-full pl-8 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  step="0.0001"
+                />
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="w-32 text-sm text-gray-600">Specialty Nail:</label>
+              <div className="relative w-full">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500">$</span>
+                <input
+                  type="number"
+                  value={settings.fastenerCosts?.specialty || 0.01}
+                  onChange={(e) => handleChange('fastenerCosts', 'specialty', '', Number(e.target.value))}
+                  className="w-full pl-8 border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  step="0.0001"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>

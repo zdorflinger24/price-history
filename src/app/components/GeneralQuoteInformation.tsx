@@ -147,13 +147,13 @@ export default function QuotesPage() {
             </select>
           </div>
           <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Customer Name</label>
+            <label className="text-sm font-medium text-gray-700">Client Name</label>
             <input
               type="text"
               value={quoteInfo.customerName}
               onChange={(e) => setQuoteInfo(prev => ({ ...prev, customerName: e.target.value }))}
               className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter customer name"
+              placeholder="Enter client name"
             />
           </div>
         </div>
