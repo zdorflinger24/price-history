@@ -25,17 +25,16 @@ const defaultSettings: GlobalSettings = {
   },
   transportationCosts: {
     baseDeliveryFee: {
-      'Truck': 100,
       'Dry Van': 200,
       'Flatbed': 250
     },
     perMileCharge: 2
   },
   vehicleDimensions: {
-    'Truck': { length: 408, width: 96, height: 96, maxWeight: 10000 },
     'Dry Van': { length: 636, width: 102, height: 110, maxWeight: 45000 },
     'Flatbed': { length: 636, width: 102, height: 0, maxWeight: 48000 }
-  }
+  },
+  lumberProcessingCost: 0.05
 };
 
 interface FirestoreData extends GlobalSettings {
@@ -77,6 +76,12 @@ export default function GlobalSettings() {
           const input = document.querySelector(`input[data-section="additionalCosts"][data-key="${key}"]`) as HTMLInputElement;
           if (input) input.value = String(value);
         });
+
+        // Update lumber processing cost
+        const lumberProcessingCostInput = document.querySelector('input[data-section="lumberProcessingCost"]') as HTMLInputElement;
+        if (lumberProcessingCostInput) {
+          lumberProcessingCostInput.value = String(data.lumberProcessingCost || defaultSettings.lumberProcessingCost || 0.05);
+        }
 
         // Update transportation costs
         Object.entries(data.transportationCosts.baseDeliveryFee || defaultSettings.transportationCosts.baseDeliveryFee).forEach(([key, value]) => {
@@ -154,6 +159,12 @@ export default function GlobalSettings() {
           (newSettings.additionalCosts as Record<string, number>)[key] = Number(input.value);
         }
       });
+
+      // Collect lumber processing cost
+      const lumberProcessingCostInput = document.querySelector('input[data-section="lumberProcessingCost"]') as HTMLInputElement;
+      if (lumberProcessingCostInput) {
+        newSettings.lumberProcessingCost = Number(lumberProcessingCostInput.value);
+      }
 
       // Collect transportation costs
       Object.keys(defaultSettings.transportationCosts.baseDeliveryFee).forEach(key => {
@@ -250,7 +261,14 @@ export default function GlobalSettings() {
               <div key={type} className="bg-gray-50 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-3">{type}</h4>
                 <div className="space-y-2">
-                  {Object.entries(prices).map(([key, value]) => (
+                  {/* Sort the entries to ensure 'c' (Price per MBF) is always first */}
+                  {Object.entries(prices)
+                    .sort(([keyA], [keyB]) => {
+                      // Custom sort order: c, b, a
+                      const order = { c: 0, b: 1, a: 2 };
+                      return order[keyA as keyof typeof order] - order[keyB as keyof typeof order];
+                    })
+                    .map(([key, value]) => (
                     <div key={key} className="flex items-center space-x-2">
                       <label className="w-32 text-sm text-gray-600">
                         {key === 'c' ? 'Price per MBF:' : key.toUpperCase() + ':'}
@@ -321,6 +339,28 @@ export default function GlobalSettings() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Lumber Processing Cost Section */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">Lumber Processing Cost</h3>
+        </div>
+        <div className="p-4">
+          <div className="flex items-center space-x-2">
+            <label className="w-64 text-sm text-gray-600">Cost per non-Green Pine component:</label>
+            <div className="relative w-full">
+              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+              <input
+                type="number"
+                defaultValue={defaultSettings.lumberProcessingCost || 0.05}
+                data-section="lumberProcessingCost"
+                className={inputClassName + " pl-6"}
+                step="0.01"
+              />
+            </div>
           </div>
         </div>
       </div>

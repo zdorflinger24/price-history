@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { doc, getDoc, addDoc, collection, serverTimestamp, setDoc, Firestore } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, serverTimestamp, setDoc, Firestore, query, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import type { GlobalSettings } from '@/lib/types';
 import { Plus } from 'lucide-react';
@@ -255,14 +255,50 @@ export default function PalletPricingTool() {
     }
 
     try {
-      // Load settings
-      const settingsRef = doc(db, 'global_pricing', 'current');
-      const settingsSnap = await getDoc(settingsRef);
+      // Load settings from the most recent document
+      const settingsQuery = query(
+        collection(db, 'global_pricing'),
+        orderBy('timestamp', 'desc'),
+        limit(1)
+      );
       
-      if (settingsSnap.exists()) {
-        setSettings(settingsSnap.data() as GlobalSettings);
+      const settingsSnapshot = await getDocs(settingsQuery);
+      if (!settingsSnapshot.empty) {
+        const settingsData = settingsSnapshot.docs[0].data() as GlobalSettings;
+        setSettings(settingsData);
       } else {
-        setError('Global settings not found. Please configure settings first.');
+        // Use default settings if no settings found in Firebase
+        const defaultSettings: GlobalSettings = {
+          lumberPrices: {
+            'Recycled': { a: 10, b: 60, c: 350 },
+            'Combo': { a: 8, b: 96, c: 500 },
+            'Green Pine': { a: 5, b: 60, c: 650 },
+            'SYP': { a: 4, b: 48, c: 700 },
+            'Hardwood': { a: 2, b: 0, c: 850 }
+          },
+          buildIntricacyCosts: {
+            'Automated': 0.75,
+            'Manual Easy': 1,
+            'Manual Intricate': 3
+          },
+          additionalCosts: {
+            painted: 0.75,
+            notched: 0.85,
+            heatTreated: 1
+          },
+          transportationCosts: {
+            baseDeliveryFee: {
+              'Dry Van': 200,
+              'Flatbed': 250
+            },
+            perMileCharge: 2
+          },
+          vehicleDimensions: {
+            'Dry Van': { length: 636, width: 102, height: 110, maxWeight: 45000 },
+            'Flatbed': { length: 636, width: 102, height: 0, maxWeight: 48000 }
+          }
+        };
+        setSettings(defaultSettings);
       }
 
       // Load locations from localStorage

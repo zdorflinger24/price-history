@@ -267,7 +267,8 @@ export default function AdvancedCalculator() {
             vehicleDimensions: {
               'Dry Van': { length: 636, width: 102, height: 110, maxWeight: 45000 },
               'Flatbed': { length: 636, width: 102, height: 0, maxWeight: 48000 }
-            }
+            },
+            lumberProcessingCost: 0.05
           };
           setSettings(defaultSettings);
         }
@@ -335,6 +336,60 @@ export default function AdvancedCalculator() {
     const leadBoardFeet = pallet.leadBoards.reduce((acc, board) => acc + calculateBoardFeet(board), 0);
     const stringerBoardFeet = pallet.stringers.reduce((acc, stringer) => acc + calculateBoardFeet(stringer), 0);
     return Number((deckBoardFeet + leadBoardFeet + stringerBoardFeet).toFixed(2));
+  };
+
+  const calculateLumberPrice = () => {
+    if (!settings?.lumberPrices) return 0;
+    
+    return pallets.reduce((totalPrice, pallet) => {
+      let palletPrice = 0;
+      
+      // Calculate price for deck boards
+      pallet.deckBoards.forEach(board => {
+        const lumberType = board.lumberType || 'Recycled';
+        const boardFeet = calculateBoardFeet(board);
+        const pricePerMBF = settings.lumberPrices[lumberType]?.c || 350; // Default to 350 if not found
+        palletPrice += boardFeet * pricePerMBF / 1000;
+      });
+      
+      // Calculate price for lead boards
+      pallet.leadBoards.forEach(board => {
+        const lumberType = board.lumberType || 'Recycled';
+        const boardFeet = calculateBoardFeet(board);
+        const pricePerMBF = settings.lumberPrices[lumberType]?.c || 350;
+        palletPrice += boardFeet * pricePerMBF / 1000;
+      });
+      
+      // Calculate price for stringers
+      pallet.stringers.forEach(stringer => {
+        const lumberType = stringer.lumberType || 'Recycled';
+        const boardFeet = calculateBoardFeet(stringer);
+        const pricePerMBF = settings.lumberPrices[lumberType]?.c || 350;
+        palletPrice += boardFeet * pricePerMBF / 1000;
+      });
+      
+      return totalPrice + palletPrice;
+    }, 0);
+  };
+
+  const calculateAdditionalOptionsCost = () => {
+    if (!settings) return 0;
+    
+    // Get costs from settings with fallbacks
+    const paintedCost = settings.additionalCosts?.painted || 0.75;
+    const notchedCost = settings.additionalCosts?.notched || 0.85;
+    const heatTreatedCost = settings.additionalCosts?.heatTreated || 1;
+    // Bands is not in settings, use default value
+    const bandsCost = 0.25;
+    
+    // Calculate total additional cost - just add the values directly
+    let additionalCost = 0;
+    if (painted) additionalCost += paintedCost;
+    if (notched) additionalCost += notchedCost;
+    if (heatTreated) additionalCost += heatTreatedCost;
+    if (bands) additionalCost += bandsCost;
+    
+    return additionalCost;
   };
 
   const handleComponentChange = (
@@ -854,6 +909,40 @@ export default function AdvancedCalculator() {
     }
   };
 
+  const calculateLumberProcessingCost = () => {
+    if (!settings?.lumberProcessingCost) return 0;
+    
+    // Count all components that are not Green Pine
+    let nonGreenPineCount = 0;
+    
+    pallets.forEach(pallet => {
+      // Count deck boards
+      pallet.deckBoards.forEach(board => {
+        // Only count if lumberType is specified and not Green Pine
+        if (board.lumberType && board.lumberType !== 'Green Pine' && board.count > 0) {
+          nonGreenPineCount += board.count;
+        }
+      });
+      
+      // Count lead boards
+      pallet.leadBoards.forEach(board => {
+        if (board.lumberType && board.lumberType !== 'Green Pine' && board.count > 0) {
+          nonGreenPineCount += board.count;
+        }
+      });
+      
+      // Count stringers
+      pallet.stringers.forEach(stringer => {
+        if (stringer.lumberType && stringer.lumberType !== 'Green Pine' && stringer.count > 0) {
+          nonGreenPineCount += stringer.count;
+        }
+      });
+    });
+    
+    // Multiply by the lumber processing cost
+    return nonGreenPineCount * (settings.lumberProcessingCost || 0);
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <div className="flex justify-between items-center mb-6">
@@ -1078,9 +1167,17 @@ export default function AdvancedCalculator() {
                   <span className="font-medium">{totalBoardFeet.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span>Total Lumber Price:</span>
+                  <span className="font-medium">${calculateLumberPrice().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Lumber Processing Cost:</span>
+                  <span className="font-medium">${calculateLumberProcessingCost().toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
                   <span>Additional Options Cost:</span>
                   <span className="font-medium">
-                    +{((painted ? 75 : 0) + (notched ? 85 : 0) + (heatTreated ? 100 : 0) + (bands ? 10 : 0))}%
+                    ${calculateAdditionalOptionsCost().toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1089,11 +1186,11 @@ export default function AdvancedCalculator() {
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span>Total Delivered Cost:</span>
-                  <span className="font-medium">${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0) + (bands ? 0.10 : 0)) + deliveryFee + laborBuildPrice).toFixed(2)}</span>
+                  <span className="font-medium">${(calculateLumberPrice() + calculateLumberProcessingCost() + calculateAdditionalOptionsCost() + deliveryFee + laborBuildPrice).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-blue-600 font-semibold">
                   <span>30% Net Revenue Price:</span>
-                  <span>${(totalBoardFeet * (1 + (painted ? 0.75 : 0) + (notched ? 0.85 : 0) + (heatTreated ? 1 : 0) + (bands ? 0.10 : 0)) * 1.3 + deliveryFee + laborBuildPrice).toFixed(2)}</span>
+                  <span>${((calculateLumberPrice() + calculateLumberProcessingCost() + calculateAdditionalOptionsCost()) * 1.3 + deliveryFee + laborBuildPrice).toFixed(2)}</span>
                 </div>
               </div>
             </div>
