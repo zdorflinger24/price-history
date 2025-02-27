@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useFirebase } from '@/lib/contexts/FirebaseContext';
 import { Plus, Trash2 } from 'lucide-react';
 import type { GlobalSettings } from '@/lib/types';
+import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 
 interface ShippingLocation {
   id: string;
@@ -66,7 +67,7 @@ const createBoard = (type: 'board'): BoardDimensions => ({
   width: 0,
   length: 0,
   type: 'board',
-  lumberType: 'Recycled'
+  lumberType: ''
 });
 
 const createStringer = (): StringerDimensions => ({
@@ -76,7 +77,7 @@ const createStringer = (): StringerDimensions => ({
   height: 0,
   length: 0,
   type: 'stringer',
-  lumberType: 'Recycled'
+  lumberType: ''
 });
 
 const createNewPallet = (): PalletComponents => ({
@@ -88,7 +89,7 @@ const createNewPallet = (): PalletComponents => ({
   deckBoards: [createBoard('board')],
   leadBoards: [createBoard('board')],
   stringers: [createStringer()],
-  fastenerType: 'Standard',
+  fastenerType: '',
   results: null
 });
 
@@ -140,7 +141,7 @@ export default function AdvancedCalculator() {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [pallets, setPallets] = useState<PalletComponents[]>([createNewPallet()]);
+  const [pallets, setPallets] = useState<PalletComponents[]>([]);
   const [locations, setLocations] = useState<ShippingLocation[]>([]);
   const [painted, setPainted] = useState<boolean>(false);
   const [notched, setNotched] = useState<boolean>(false);
@@ -148,10 +149,73 @@ export default function AdvancedCalculator() {
   const [bands, setBands] = useState<boolean>(false);
   const [deliveryFee, setDeliveryFee] = useState<number>(0);
   const [laborBuildPrice, setLaborBuildPrice] = useState<number>(0);
-  const [activePalletId, setActivePalletId] = useState(pallets[0]?.id);
+  const [activePalletId, setActivePalletId] = useState('');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAddLocationModalOpen, setIsAddLocationModalOpen] = useState(false);
   const [newLocation, setNewLocation] = useState({ name: '', address: '', distance: '' });
+
+  // Load saved data from localStorage on initial render
+  useEffect(() => {
+    // Load pallets
+    const savedPallets = localStorage.getItem('advancedCalculator_pallets');
+    if (savedPallets) {
+      const parsedPallets = JSON.parse(savedPallets);
+      setPallets(parsedPallets);
+      if (parsedPallets.length > 0) {
+        setActivePalletId(parsedPallets[0].id);
+      }
+    } else {
+      // Initialize with a default pallet if none saved
+      const defaultPallet = createNewPallet();
+      setPallets([defaultPallet]);
+      setActivePalletId(defaultPallet.id);
+    }
+
+    // Load additional options
+    const savedOptions = localStorage.getItem('advancedCalculator_options');
+    if (savedOptions) {
+      const options = JSON.parse(savedOptions);
+      setPainted(options.painted || false);
+      setNotched(options.notched || false);
+      setHeatTreated(options.heatTreated || false);
+      setBands(options.bands || false);
+    }
+
+    // Load pricing info
+    const savedPricing = localStorage.getItem('advancedCalculator_pricing');
+    if (savedPricing) {
+      const pricing = JSON.parse(savedPricing);
+      setDeliveryFee(pricing.deliveryFee || 0);
+      setLaborBuildPrice(pricing.laborBuildPrice || 0);
+    }
+  }, []);
+
+  // Load locations from localStorage
+  useEffect(() => {
+    const storedLocations = localStorage.getItem('shippingLocations');
+    if (storedLocations) {
+      setLocations(JSON.parse(storedLocations));
+    }
+  }, []);
+
+  // Save pallets to localStorage whenever they change
+  useEffect(() => {
+    if (pallets.length > 0) {
+      localStorage.setItem('advancedCalculator_pallets', JSON.stringify(pallets));
+    }
+  }, [pallets]);
+
+  // Save additional options to localStorage whenever they change
+  useEffect(() => {
+    const options = { painted, notched, heatTreated, bands };
+    localStorage.setItem('advancedCalculator_options', JSON.stringify(options));
+  }, [painted, notched, heatTreated, bands]);
+
+  // Save pricing info to localStorage whenever it changes
+  useEffect(() => {
+    const pricing = { deliveryFee, laborBuildPrice };
+    localStorage.setItem('advancedCalculator_pricing', JSON.stringify(pricing));
+  }, [deliveryFee, laborBuildPrice]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -162,9 +226,55 @@ export default function AdvancedCalculator() {
       }
 
       try {
-        // Load settings and locations from Firebase
+        // Load settings from Firebase
+        const settingsQuery = query(
+          collection(db, 'global_pricing'),
+          orderBy('timestamp', 'desc'),
+          limit(1)
+        );
+        
+        const settingsSnapshot = await getDocs(settingsQuery);
+        if (!settingsSnapshot.empty) {
+          const settingsData = settingsSnapshot.docs[0].data() as GlobalSettings;
+          setSettings(settingsData);
+        } else {
+          // Use default settings if no settings found in Firebase
+          const defaultSettings: GlobalSettings = {
+            lumberPrices: {
+              'Recycled': { a: 10, b: 60, c: 350 },
+              'Combo': { a: 8, b: 96, c: 500 },
+              'Green Pine': { a: 5, b: 60, c: 650 },
+              'SYP': { a: 4, b: 48, c: 700 },
+              'Hardwood': { a: 2, b: 0, c: 850 }
+            },
+            buildIntricacyCosts: {
+              'Automated': 0.75,
+              'Manual Easy': 1,
+              'Manual Intricate': 3
+            },
+            additionalCosts: {
+              painted: 0.75,
+              notched: 0.85,
+              heatTreated: 1
+            },
+            transportationCosts: {
+              baseDeliveryFee: {
+                'Dry Van': 200,
+                'Flatbed': 250
+              },
+              perMileCharge: 2
+            },
+            vehicleDimensions: {
+              'Dry Van': { length: 636, width: 102, height: 110, maxWeight: 45000 },
+              'Flatbed': { length: 636, width: 102, height: 0, maxWeight: 48000 }
+            }
+          };
+          setSettings(defaultSettings);
+        }
+        
         setLoading(false);
       } catch (err) {
+        console.error('Error loading data:', err);
         setError('Error loading data');
         setLoading(false);
       }
@@ -172,13 +282,6 @@ export default function AdvancedCalculator() {
 
     loadData();
   }, [db]);
-
-  useEffect(() => {
-    const storedLocations = localStorage.getItem('shippingLocations');
-    if (storedLocations) {
-      setLocations(JSON.parse(storedLocations));
-    }
-  }, []);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
@@ -218,6 +321,12 @@ export default function AdvancedCalculator() {
   const calculateBoardFeet = (dimensions: BoardDimensions | StringerDimensions) => {
     const { count, width, length } = dimensions;
     const thickness = dimensions.type === 'board' ? dimensions.thickness : dimensions.height;
+    
+    // Ensure all values are valid numbers
+    if (!count || !width || !length || !thickness) {
+      return 0;
+    }
+    
     return Number((count * thickness * width * length / 144).toFixed(2));
   };
 
@@ -405,45 +514,19 @@ export default function AdvancedCalculator() {
           value={(dimensions as StringerDimensions).height}
           onChange={(value) => onUpdate('height', value)}
         />
-      ) : isGreenPine ? (
+      ) : (
         <InputField
           label="Thickness (in)"
           value={(dimensions as BoardDimensions).thickness}
           onChange={(value) => onUpdate('thickness', value)}
         />
-      ) : (
-        <div className="flex flex-col space-y-1">
-          <label className="text-sm font-medium text-gray-700">Thickness (in)</label>
-          <select
-            value={(dimensions as BoardDimensions).thickness}
-            onChange={(e) => onUpdate('thickness', parseFloat(e.target.value))}
-            className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
-          >
-            <option value="0.438">0.438"</option>
-            <option value="0.688">0.688"</option>
-          </select>
-        </div>
       )}
       
-      {isGreenPine || isStringer ? (
-        <InputField
-          label="Width (in)"
-          value={dimensions.width}
-          onChange={(value) => onUpdate('width', value)}
-        />
-      ) : (
-        <div className="flex flex-col space-y-1">
-          <label className="text-sm font-medium text-gray-700">Width (in)</label>
-          <select
-            value={dimensions.width}
-            onChange={(e) => onUpdate('width', parseFloat(e.target.value))}
-            className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:bg-white transition-colors"
-          >
-            <option value="3.5">3.5"</option>
-            <option value="5.5">5.5"</option>
-          </select>
-        </div>
-      )}
+      <InputField
+        label="Width (in)"
+        value={dimensions.width}
+        onChange={(value) => onUpdate('width', value)}
+      />
       
       <InputField
         label="Length (in)"
@@ -459,6 +542,7 @@ export default function AdvancedCalculator() {
         >
           {settings?.lumberPrices ? (
             Object.entries(settings.lumberPrices)
+              .filter(([type]) => type !== 'Combo')
               .map(([type]) => (
                 <option key={type} value={type}>
                   {type}
@@ -467,7 +551,6 @@ export default function AdvancedCalculator() {
           ) : (
             <>
               <option value="Recycled">Recycled</option>
-              <option value="Combo">Combo</option>
               <option value="Green Pine">Green Pine</option>
               <option value="SYP">SYP</option>
             </>
@@ -475,7 +558,7 @@ export default function AdvancedCalculator() {
         </select>
       </div>
     </div>
-  )};
+  )}
 
   const ComponentSection = ({ 
     title, 
@@ -491,8 +574,13 @@ export default function AdvancedCalculator() {
     const isStringer = type === 'stringers';
     const totalBoardFeet = components.reduce((acc, comp) => acc + calculateBoardFeet(comp), 0);
 
+    // Create a unique key based on component values to force re-render
+    const componentKey = components.map(c => 
+      `${c.id}-${c.count}-${c.width}-${c.length}-${c.type === 'board' ? c.thickness : c.height}`
+    ).join('|');
+
     return (
-      <div className="space-y-1">
+      <div className="space-y-1" key={componentKey}>
         <div className="flex justify-between items-center border-b border-gray-200 pb-1">
           <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <span className="text-sm font-medium text-gray-600">
