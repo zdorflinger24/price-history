@@ -89,7 +89,7 @@ const createNewPallet = (): PalletComponents => ({
   deckBoards: [createBoard('board')],
   leadBoards: [createBoard('board')],
   stringers: [createStringer()],
-  fastenerType: '',
+  fastenerType: 'Standard',
   results: null
 });
 
@@ -612,9 +612,6 @@ export default function AdvancedCalculator() {
   };
 
   const calculateFastenerCost = () => {
-    const components = calculateTotalComponents();
-    const fastenerCount = calculateFasteners();
-    
     // Default costs if settings are not available
     const fastenerCosts = {
       Standard: settings?.fastenerCosts?.standard || 0.0046,
@@ -624,11 +621,20 @@ export default function AdvancedCalculator() {
     
     // Calculate cost based on fastener type for each pallet
     return pallets.reduce((total, pallet) => {
-      const palletFastenerCount = (pallet.deckBoards.reduce((sum, board) => sum + board.count, 0) + 
-                                 pallet.leadBoards.reduce((sum, board) => sum + board.count, 0)) * 
-                                 pallet.stringers.reduce((sum, stringer) => sum + stringer.count, 0) * 2;
+      // Use 'Standard' as default if no fastener type is selected
+      const fastenerType = pallet.fastenerType || 'Standard';
       
-      return total + (palletFastenerCount * fastenerCosts[pallet.fastenerType as keyof typeof fastenerCosts]);
+      const deckBoardCount = pallet.deckBoards.reduce((sum, board) => sum + board.count, 0);
+      const leadBoardCount = pallet.leadBoards.reduce((sum, board) => sum + board.count, 0);
+      const stringerCount = pallet.stringers.reduce((sum, stringer) => sum + stringer.count, 0);
+      
+      // Calculate fastener count based on the formula:
+      // (deckboards * stringers * 2) + (leadboards * stringers * 3)
+      const palletFastenerCount = (deckBoardCount * stringerCount * 2) + 
+                                 (leadBoardCount * stringerCount * 3);
+      
+      const costPerFastener = fastenerCosts[fastenerType as keyof typeof fastenerCosts];
+      return total + (palletFastenerCount * costPerFastener);
     }, 0);
   };
 
@@ -717,9 +723,10 @@ export default function AdvancedCalculator() {
                 Fastener Type
               </label>
               <select
-                value={pallet.fastenerType}
+                value={pallet.fastenerType || 'Standard'}
                 onChange={(e) => handlePalletChange(pallet.id, 'fastenerType', e.target.value)}
                 className="w-full px-3 py-1.5 bg-gray-50 border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                required
               >
                 <option value="Standard">Standard</option>
                 <option value="Automatic Nail">Automatic Nail</option>
@@ -797,8 +804,18 @@ export default function AdvancedCalculator() {
   };
 
   const calculateFasteners = () => {
-    const components = calculateTotalComponents();
-    return (components.deckBoards + components.leadBoards) * components.stringers * 2;
+    return pallets.reduce((total, pallet) => {
+      const deckBoardCount = pallet.deckBoards.reduce((sum, board) => sum + board.count, 0);
+      const leadBoardCount = pallet.leadBoards.reduce((sum, board) => sum + board.count, 0);
+      const stringerCount = pallet.stringers.reduce((sum, stringer) => sum + stringer.count, 0);
+      
+      // Calculate fastener count based on the formula:
+      // (deckboards * stringers * 2) + (leadboards * stringers * 3)
+      const palletFastenerCount = (deckBoardCount * stringerCount * 2) + 
+                                 (leadBoardCount * stringerCount * 3);
+      
+      return total + palletFastenerCount;
+    }, 0);
   };
 
   const handleCalculatePricing = () => {
@@ -1022,7 +1039,13 @@ export default function AdvancedCalculator() {
                 </div>
                 <div className="flex justify-between">
                   <span>Fastener Cost:</span>
-                  <span className="font-medium">${calculateFastenerCost().toFixed(2)}</span>
+                  <span className="font-medium">${
+                    (() => {
+                      const cost = calculateFastenerCost();
+                      // For small costs (less than $1), show 3 decimal places
+                      return cost < 1 ? cost.toFixed(3) : cost.toFixed(2);
+                    })()
+                  }</span>
                 </div>
               </div>
             </div>
