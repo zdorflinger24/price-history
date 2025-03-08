@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { doc, setDoc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { useFirebase } from '@/lib/contexts/FirebaseContext';
 import type { GlobalSettings } from '@/lib/types';
+import { supabase } from '@/lib/supabase/supabaseClient';
 
 const defaultSettings: GlobalSettings = {
   lumberPrices: {
@@ -45,45 +44,66 @@ const defaultSettings: GlobalSettings = {
 };
 
 function GlobalSettingsContent() {
-  const { db } = useFirebase();
   const [settings, setSettings] = useState<GlobalSettings>(defaultSettings);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
-    if (db) {
-      initializeSettings();
-    }
-  }, [db]);
+    initializeSettings();
+  }, []);
 
   const initializeSettings = async () => {
-    if (!db) {
-      setMessage({ type: 'warning', text: 'Working with default settings until database connection is established.' });
-      return;
-    }
-    
     setIsLoading(true);
     try {
-      const docRef = doc(db, 'global_pricing', 'current');
-      const docSnap = await getDoc(docRef);
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
       
-      if (docSnap.exists()) {
-        setSettings(docSnap.data() as GlobalSettings);
+      if (error) {
+        console.error('Error loading settings:', error);
+        setMessage({ type: 'error', text: 'Error loading settings. Using default values.' });
+        setSettings(defaultSettings);
+        return;
+      }
+      
+      if (data) {
+        const globalSettings: GlobalSettings = {
+          lumberPrices: data.lumber_prices,
+          buildIntricacyCosts: data.build_intricacy_costs,
+          additionalCosts: data.additional_costs,
+          transportationCosts: data.transportation_costs,
+          vehicleDimensions: data.vehicle_dimensions,
+          fastenerCosts: data.fastener_costs,
+          lumberProcessingCost: data.lumber_processing_cost
+        };
+        setSettings(globalSettings);
+        setMessage({ type: 'success', text: 'Settings loaded successfully!' });
       } else {
         // If no settings exist, save the default settings
-        await setDoc(docRef, defaultSettings);
+        const { error: insertError } = await supabase
+          .from('settings')
+          .insert([{
+            lumber_prices: defaultSettings.lumberPrices,
+            build_intricacy_costs: defaultSettings.buildIntricacyCosts,
+            additional_costs: defaultSettings.additionalCosts,
+            transportation_costs: defaultSettings.transportationCosts,
+            vehicle_dimensions: defaultSettings.vehicleDimensions,
+            fastener_costs: defaultSettings.fastenerCosts,
+            lumber_processing_cost: defaultSettings.lumberProcessingCost,
+            updated_at: new Date().toISOString()
+          }]);
         
-        // Add to history
-        const historyRef = collection(db, 'global_pricing');
-        await addDoc(historyRef, {
-          ...defaultSettings,
-          timestamp: serverTimestamp(),
-          type: 'initial'
-        });
-
-        setSettings(defaultSettings);
-        setMessage({ type: 'success', text: 'Default settings initialized successfully!' });
+        if (insertError) {
+          console.error('Error saving default settings:', insertError);
+          setMessage({ type: 'error', text: 'Error saving default settings.' });
+        } else {
+          setSettings(defaultSettings);
+          setMessage({ type: 'success', text: 'Default settings initialized successfully!' });
+        }
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -94,36 +114,34 @@ function GlobalSettingsContent() {
     }
   };
 
-  const handleSave = async () => {
-    if (!db) {
-      setMessage({ type: 'error', text: 'Cannot save settings - database connection not available.' });
-      return;
-    }
-
+  const handleSaveSettings = async () => {
     setIsSaving(true);
     try {
-      const settingsToSave = {
-        ...settings,
-        lumberPrices: Object.fromEntries(Object.entries(settings.lumberPrices).filter(([key]) => key !== 'Hardwood'))
-      };
-      // First, update the current settings
-      const currentRef = doc(db, 'global_pricing', 'current');
-      await setDoc(currentRef, settingsToSave);
+      const { error } = await supabase
+        .from('settings')
+        .insert([{
+          lumber_prices: settings.lumberPrices,
+          build_intricacy_costs: settings.buildIntricacyCosts,
+          additional_costs: settings.additionalCosts,
+          transportation_costs: settings.transportationCosts,
+          vehicle_dimensions: settings.vehicleDimensions,
+          fastener_costs: settings.fastenerCosts,
+          lumber_processing_cost: settings.lumberProcessingCost,
+          updated_at: new Date().toISOString()
+        }]);
 
-      // Then, add a new document to track the history with timestamp
-      const historyRef = collection(db, 'global_pricing');
-      await addDoc(historyRef, {
-        ...settingsToSave,
-        timestamp: serverTimestamp(),
-        type: 'update'
-      });
-
-      setMessage({ type: 'success', text: 'Settings saved successfully!' });
+      if (error) {
+        console.error('Error saving settings:', error);
+        setMessage({ type: 'error', text: 'Failed to save settings.' });
+      } else {
+        setMessage({ type: 'success', text: 'Settings saved successfully!' });
+      }
     } catch (error) {
       console.error('Error saving settings:', error);
-      setMessage({ type: 'error', text: 'Error saving settings' });
+      setMessage({ type: 'error', text: 'Failed to save settings.' });
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const handleChange = (
@@ -171,7 +189,7 @@ function GlobalSettingsContent() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Global Pricing Settings</h2>
         <button
-          onClick={handleSave}
+          onClick={handleSaveSettings}
           disabled={isSaving}
           className={`px-6 py-2 rounded-lg font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors ${
             isSaving
@@ -430,17 +448,9 @@ function GlobalSettingsContent() {
   );
 }
 
-// Client-side only wrapper
 export default function GlobalSettings() {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center h-64">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="text-gray-600">Loading settings...</p>
-        </div>
-      </div>
-    }>
+    <Suspense fallback={<div>Loading...</div>}>
       <GlobalSettingsContent />
     </Suspense>
   );

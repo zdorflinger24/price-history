@@ -1,229 +1,213 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
-import { db } from '@/lib/firebase/firebase';
-import { doc, setDoc, collection, addDoc, serverTimestamp, query, orderBy, limit, getDocs, onSnapshot, Timestamp } from 'firebase/firestore';
-import type { GlobalSettings } from '@/lib/types';
+import { useEffect, useCallback, useState } from 'react';
+import { supabase } from '@/lib/supabase/supabaseClient';
+import type { Settings } from '@/lib/types/supabase';
 
-const defaultSettings: GlobalSettings = {
-  lumberPrices: {
+const defaultSettings: Omit<Settings, 'id' | 'created_at' | 'updated_at'> = {
+  lumber_prices: {
     'Recycled': { a: 10, b: 60, c: 350 },
     'Combo': { a: 8, b: 96, c: 500 },
     'Green Pine': { a: 5, b: 60, c: 650 },
     'SYP': { a: 4, b: 48, c: 700 },
     'Hardwood': { a: 2, b: 0, c: 850 }
   },
-  buildIntricacyCosts: {
+  build_intricacy_costs: {
     'Automated': 0.75,
     'Manual Easy': 1,
     'Manual Intricate': 3
   },
-  additionalCosts: {
+  additional_costs: {
     painted: 0.75,
     notched: 0.85,
-    heatTreated: 1
+    heat_treated: 1
   },
-  transportationCosts: {
-    baseDeliveryFee: {
+  transportation_costs: {
+    base_delivery_fee: {
       'Dry Van': 200,
       'Flatbed': 250
     },
-    perMileCharge: 2
+    per_mile_charge: 2
   },
-  vehicleDimensions: {
-    'Dry Van': { length: 636, width: 102, height: 110, maxWeight: 45000 },
-    'Flatbed': { length: 636, width: 102, height: 0, maxWeight: 48000 }
+  vehicle_dimensions: {
+    'Dry Van': { length: 636, width: 102, height: 110, max_weight: 45000 },
+    'Flatbed': { length: 636, width: 102, height: 0, max_weight: 48000 }
   },
-  lumberProcessingCost: 0.05
+  lumber_processing_cost: 0.05
 };
 
-interface FirestoreData extends GlobalSettings {
-  timestamp: Timestamp;
-  type: string;
-}
-
 export default function GlobalSettings() {
+  const [message, setMessage] = useState({ type: '', text: '' });
+  const [isLoading, setIsLoading] = useState(true);
+
   useEffect(() => {
-    // Query for the most recent settings
-    const q = query(
-      collection(db, 'global_pricing'),
-      orderBy('timestamp', 'desc'),
-      limit(1)
-    );
+    const fetchSettings = async () => {
+      try {
+        const { data: settings, error } = await supabase
+          .from('settings')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
 
-    // Set up real-time listener
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        const doc = snapshot.docs[0];
-        const data = doc.data() as FirestoreData;
-        
-        // Update lumber prices
-        Object.entries(data.lumberPrices || defaultSettings.lumberPrices).forEach(([type, prices]) => {
-          Object.entries(prices).forEach(([key, value]) => {
-            const input = document.querySelector(`input[data-type="${type}"][data-key="${key}"]`) as HTMLInputElement;
+        if (error) throw error;
+
+        if (settings) {
+          const typedSettings = settings as Settings;
+          
+          // Update lumber prices
+          Object.entries(typedSettings.lumber_prices || defaultSettings.lumber_prices).forEach(([type, prices]) => {
+            Object.entries(prices).forEach(([key, value]) => {
+              const input = document.querySelector(`input[data-type="${type}"][data-key="${key}"]`) as HTMLInputElement;
+              if (input) input.value = String(value);
+            });
+          });
+
+          // Update build intricacy costs
+          Object.entries(typedSettings.build_intricacy_costs || defaultSettings.build_intricacy_costs).forEach(([key, value]) => {
+            const input = document.querySelector(`input[data-section="buildIntricacyCosts"][data-key="${key}"]`) as HTMLInputElement;
             if (input) input.value = String(value);
           });
-        });
 
-        // Update build intricacy costs
-        Object.entries(data.buildIntricacyCosts || defaultSettings.buildIntricacyCosts).forEach(([key, value]) => {
-          const input = document.querySelector(`input[data-section="buildIntricacyCosts"][data-key="${key}"]`) as HTMLInputElement;
-          if (input) input.value = String(value);
-        });
-
-        // Update additional costs
-        Object.entries(data.additionalCosts || defaultSettings.additionalCosts).forEach(([key, value]) => {
-          const input = document.querySelector(`input[data-section="additionalCosts"][data-key="${key}"]`) as HTMLInputElement;
-          if (input) input.value = String(value);
-        });
-
-        // Update lumber processing cost
-        const lumberProcessingCostInput = document.querySelector('input[data-section="lumberProcessingCost"]') as HTMLInputElement;
-        if (lumberProcessingCostInput) {
-          lumberProcessingCostInput.value = String(data.lumberProcessingCost || defaultSettings.lumberProcessingCost || 0.05);
-        }
-
-        // Update transportation costs
-        Object.entries(data.transportationCosts.baseDeliveryFee || defaultSettings.transportationCosts.baseDeliveryFee).forEach(([key, value]) => {
-          const input = document.querySelector(`input[data-section="baseDeliveryFee"][data-key="${key}"]`) as HTMLInputElement;
-          if (input) input.value = String(value);
-        });
-
-        const perMileInput = document.querySelector('input[data-section="perMileCharge"]') as HTMLInputElement;
-        if (perMileInput) perMileInput.value = String(data.transportationCosts.perMileCharge || defaultSettings.transportationCosts.perMileCharge);
-
-        // Update vehicle dimensions
-        Object.entries(data.vehicleDimensions || defaultSettings.vehicleDimensions).forEach(([type, dims]) => {
-          Object.entries(dims).forEach(([key, value]) => {
-            const input = document.querySelector(`input[data-type="${type}"][data-dimension="${key}"]`) as HTMLInputElement;
+          // Update additional costs
+          Object.entries(typedSettings.additional_costs || defaultSettings.additional_costs).forEach(([key, value]) => {
+            const input = document.querySelector(`input[data-section="additionalCosts"][data-key="${key}"]`) as HTMLInputElement;
             if (input) input.value = String(value);
           });
-        });
 
-        // Update timestamp display
-        if (data.timestamp) {
-          const timestampElement = document.getElementById('lastUpdated');
-          if (timestampElement) {
-            const date = data.timestamp.toDate();
-            timestampElement.textContent = `Last updated: ${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`;
+          // Update lumber processing cost
+          const lumberProcessingCostInput = document.querySelector('input[data-section="lumberProcessingCost"]') as HTMLInputElement;
+          if (lumberProcessingCostInput) {
+            lumberProcessingCostInput.value = String(typedSettings.lumber_processing_cost || defaultSettings.lumber_processing_cost);
+          }
+
+          // Update transportation costs
+          Object.entries(typedSettings.transportation_costs.base_delivery_fee || defaultSettings.transportation_costs.base_delivery_fee).forEach(([key, value]) => {
+            const input = document.querySelector(`input[data-section="baseDeliveryFee"][data-key="${key}"]`) as HTMLInputElement;
+            if (input) input.value = String(value);
+          });
+
+          const perMileInput = document.querySelector('input[data-section="perMileCharge"]') as HTMLInputElement;
+          if (perMileInput) perMileInput.value = String(typedSettings.transportation_costs.per_mile_charge || defaultSettings.transportation_costs.per_mile_charge);
+
+          // Update vehicle dimensions
+          Object.entries(typedSettings.vehicle_dimensions || defaultSettings.vehicle_dimensions).forEach(([type, dims]) => {
+            Object.entries(dims).forEach(([key, value]) => {
+              const input = document.querySelector(`input[data-type="${type}"][data-dimension="${key}"]`) as HTMLInputElement;
+              if (input) input.value = String(value);
+            });
+          });
+
+          // Update timestamp display
+          if (typedSettings.updated_at) {
+            const timestampElement = document.getElementById('lastUpdated');
+            if (timestampElement) {
+              const date = new Date(typedSettings.updated_at);
+              timestampElement.textContent = `Last updated: ${date.toLocaleDateString()} at ${date.toLocaleTimeString()}`;
+            }
           }
         }
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+        setMessage({ type: 'error', text: 'Error loading settings. Using default values.' });
+      } finally {
+        setIsLoading(false);
       }
-    });
+    };
 
-    return () => unsubscribe();
+    fetchSettings();
   }, []);
 
   const handleSave = useCallback(async () => {
     const saveButton = document.querySelector('#saveButton') as HTMLButtonElement;
-    const messageDiv = document.querySelector('#messageDiv') as HTMLDivElement;
-    
     if (saveButton) saveButton.disabled = true;
-    if (messageDiv) messageDiv.className = 'p-4 rounded-lg';
     
     try {
-      const newSettings: GlobalSettings = {
-        lumberPrices: {},
-        buildIntricacyCosts: {},
-        additionalCosts: {},
-        transportationCosts: {
-          baseDeliveryFee: {},
-          perMileCharge: 0
+      const newSettings: Omit<Settings, 'id' | 'created_at' | 'updated_at'> = {
+        lumber_prices: {},
+        build_intricacy_costs: {},
+        additional_costs: {
+          painted: 0,
+          notched: 0,
+          heat_treated: 0
         },
-        vehicleDimensions: {}
+        transportation_costs: {
+          base_delivery_fee: {},
+          per_mile_charge: 0
+        },
+        vehicle_dimensions: {},
+        lumber_processing_cost: 0
       };
 
       // Collect lumber prices
-      Object.keys(defaultSettings.lumberPrices).forEach(type => {
-        newSettings.lumberPrices[type] = { a: 0, b: 0, c: 0 };
+      Object.keys(defaultSettings.lumber_prices).forEach(type => {
+        newSettings.lumber_prices[type] = { a: 0, b: 0, c: 0 };
         ['a', 'b', 'c'].forEach(key => {
           const input = document.querySelector(`input[data-type="${type}"][data-key="${key}"]`) as HTMLInputElement;
           if (input) {
-            newSettings.lumberPrices[type][key as keyof typeof newSettings.lumberPrices[typeof type]] = Number(input.value);
+            newSettings.lumber_prices[type][key as keyof typeof newSettings.lumber_prices[typeof type]] = Number(input.value);
           }
         });
       });
 
       // Collect build intricacy costs
-      Object.keys(defaultSettings.buildIntricacyCosts).forEach(key => {
+      Object.keys(defaultSettings.build_intricacy_costs).forEach(key => {
         const input = document.querySelector(`input[data-section="buildIntricacyCosts"][data-key="${key}"]`) as HTMLInputElement;
         if (input) {
-          (newSettings.buildIntricacyCosts as Record<string, number>)[key] = Number(input.value);
+          newSettings.build_intricacy_costs[key] = Number(input.value);
         }
       });
 
       // Collect additional costs
-      Object.keys(defaultSettings.additionalCosts).forEach(key => {
+      Object.keys(defaultSettings.additional_costs).forEach(key => {
         const input = document.querySelector(`input[data-section="additionalCosts"][data-key="${key}"]`) as HTMLInputElement;
         if (input) {
-          (newSettings.additionalCosts as Record<string, number>)[key] = Number(input.value);
+          newSettings.additional_costs[key as keyof typeof newSettings.additional_costs] = Number(input.value);
         }
       });
 
       // Collect lumber processing cost
       const lumberProcessingCostInput = document.querySelector('input[data-section="lumberProcessingCost"]') as HTMLInputElement;
       if (lumberProcessingCostInput) {
-        newSettings.lumberProcessingCost = Number(lumberProcessingCostInput.value);
+        newSettings.lumber_processing_cost = Number(lumberProcessingCostInput.value);
       }
 
       // Collect transportation costs
-      Object.keys(defaultSettings.transportationCosts.baseDeliveryFee).forEach(key => {
+      Object.keys(defaultSettings.transportation_costs.base_delivery_fee).forEach(key => {
         const input = document.querySelector(`input[data-section="baseDeliveryFee"][data-key="${key}"]`) as HTMLInputElement;
         if (input) {
-          newSettings.transportationCosts.baseDeliveryFee[key] = Number(input.value);
+          newSettings.transportation_costs.base_delivery_fee[key] = Number(input.value);
         }
       });
 
       const perMileInput = document.querySelector('input[data-section="perMileCharge"]') as HTMLInputElement;
       if (perMileInput) {
-        newSettings.transportationCosts.perMileCharge = Number(perMileInput.value);
+        newSettings.transportation_costs.per_mile_charge = Number(perMileInput.value);
       }
 
       // Collect vehicle dimensions
-      Object.keys(defaultSettings.vehicleDimensions).forEach(type => {
-        newSettings.vehicleDimensions[type] = { length: 0, width: 0, height: 0, maxWeight: 0 };
-        ['length', 'width', 'height', 'maxWeight'].forEach(key => {
+      Object.keys(defaultSettings.vehicle_dimensions).forEach(type => {
+        newSettings.vehicle_dimensions[type] = { length: 0, width: 0, height: 0, max_weight: 0 };
+        ['length', 'width', 'height', 'max_weight'].forEach(key => {
           const input = document.querySelector(`input[data-type="${type}"][data-dimension="${key}"]`) as HTMLInputElement;
           if (input) {
-            newSettings.vehicleDimensions[type][key as keyof typeof newSettings.vehicleDimensions[typeof type]] = Number(input.value);
+            newSettings.vehicle_dimensions[type][key as keyof typeof newSettings.vehicle_dimensions[typeof type]] = Number(input.value);
           }
         });
       });
 
-      // Create a formatted timestamp string for the document ID
-      const now = new Date();
-      const month = (now.getMonth() + 1).toString().padStart(2, '0');
-      const day = now.getDate().toString().padStart(2, '0');
-      const year = now.getFullYear();
-      const hours = now.getHours().toString().padStart(2, '0');
-      const minutes = now.getMinutes().toString().padStart(2, '0');
-      const seconds = now.getSeconds().toString().padStart(2, '0');
-      const timestampStr = `${month}-${day}-${year}-${hours}-${minutes}-${seconds}`;
+      // Save to Supabase
+      const { error } = await supabase
+        .from('settings')
+        .insert(newSettings)
+        .select();
 
-      // Save to Firebase with formatted timestamp as document ID
-      await setDoc(doc(db, 'global_pricing', timestampStr), {
-        ...newSettings,
-        timestamp: serverTimestamp(),
-        type: 'current'
-      });
+      if (error) throw error;
       
-      // Add to history with the same timestamp ID
-      await setDoc(doc(db, 'global_pricing_history', timestampStr), {
-        ...newSettings,
-        timestamp: serverTimestamp(),
-        type: 'update'
-      });
-
-      if (messageDiv) {
-        messageDiv.textContent = 'Settings saved successfully!';
-        messageDiv.className = 'p-4 rounded-lg bg-green-50 text-green-800';
-      }
+      setMessage({ type: 'success', text: 'Settings saved successfully!' });
     } catch (error) {
       console.error('Error saving settings:', error);
-      if (messageDiv) {
-        messageDiv.textContent = 'Error saving settings';
-        messageDiv.className = 'p-4 rounded-lg bg-red-50 text-red-800';
-      }
+      setMessage({ type: 'error', text: 'Error saving settings' });
     } finally {
       if (saveButton) saveButton.disabled = false;
     }
@@ -248,7 +232,9 @@ export default function GlobalSettings() {
         </button>
       </div>
 
-      <div id="messageDiv" className="hidden"></div>
+      <div id="messageDiv" className={`p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+        {message.text}
+      </div>
 
       {/* Lumber Prices Section */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -257,7 +243,7 @@ export default function GlobalSettings() {
         </div>
         <div className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Object.entries(defaultSettings.lumberPrices).map(([type, prices]) => (
+            {Object.entries(defaultSettings.lumber_prices).map(([type, prices]) => (
               <div key={type} className="bg-gray-50 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-3">{type}</h4>
                 <div className="space-y-2">
@@ -296,7 +282,7 @@ export default function GlobalSettings() {
         </div>
         <div className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {Object.entries(defaultSettings.buildIntricacyCosts).map(([key, value]) => (
+            {Object.entries(defaultSettings.build_intricacy_costs).map(([key, value]) => (
               <div key={key} className="flex items-center space-x-2">
                 <label className="w-32 text-sm text-gray-600">{key}:</label>
                 <div className="relative w-full">
@@ -323,7 +309,7 @@ export default function GlobalSettings() {
         </div>
         <div className="p-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {Object.entries(defaultSettings.additionalCosts).map(([key, value]) => (
+            {Object.entries(defaultSettings.additional_costs).map(([key, value]) => (
               <div key={key} className="flex items-center space-x-2">
                 <label className="w-32 text-sm text-gray-600 capitalize">{key}:</label>
                 <div className="relative w-full">
@@ -355,7 +341,7 @@ export default function GlobalSettings() {
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
               <input
                 type="number"
-                defaultValue={defaultSettings.lumberProcessingCost || 0.05}
+                defaultValue={defaultSettings.lumber_processing_cost || 0.05}
                 data-section="lumberProcessingCost"
                 className={inputClassName + " pl-6"}
                 step="0.01"
@@ -375,7 +361,7 @@ export default function GlobalSettings() {
             <div className="bg-gray-50 rounded-lg p-4">
               <h4 className="font-medium text-gray-900 mb-3">Base Delivery Fees</h4>
               <div className="space-y-2">
-                {Object.entries(defaultSettings.transportationCosts.baseDeliveryFee).map(([type, fee]) => (
+                {Object.entries(defaultSettings.transportation_costs.base_delivery_fee).map(([type, fee]) => (
                   <div key={type} className="flex items-center space-x-2">
                     <label className="w-32 text-sm text-gray-600">{type}:</label>
                     <div className="relative w-full">
@@ -401,7 +387,7 @@ export default function GlobalSettings() {
                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
                   <input
                     type="number"
-                    defaultValue={defaultSettings.transportationCosts.perMileCharge}
+                    defaultValue={defaultSettings.transportation_costs.per_mile_charge}
                     data-section="perMileCharge"
                     className={inputClassName + " pl-6"}
                     step="0.01"
@@ -420,7 +406,7 @@ export default function GlobalSettings() {
         </div>
         <div className="p-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {Object.entries(defaultSettings.vehicleDimensions).map(([type, dims]) => (
+            {Object.entries(defaultSettings.vehicle_dimensions).map(([type, dims]) => (
               <div key={type} className="bg-gray-50 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-3">{type}</h4>
                 <div className="space-y-2">

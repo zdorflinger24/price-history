@@ -20,17 +20,4 @@ export function getCurrentTimestamp(): Date {
 
 export function parseDate(dateString: string): Date {
   return new Date(dateString);
-}
-
-// Use this when saving to Firestore
-export function toFirestoreTimestamp(date: Date) {
-  return {
-    seconds: Math.floor(date.getTime() / 1000),
-    nanoseconds: (date.getTime() % 1000) * 1e6
-  };
-}
-
-// Use this when reading from Firestore
-export function fromFirestoreTimestamp(timestamp: { seconds: number; nanoseconds: number }): Date {
-  return new Date(timestamp.seconds * 1000 + timestamp.nanoseconds / 1e6);
 } 

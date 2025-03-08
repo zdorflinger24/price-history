@@ -11,5 +11,5 @@ You can also edit the Path's prompt template to be whatever you like!
 This doesn't really matter, but is useful for the AI to understand more about this project. We are using the following technologies
 - React with Next.js 14 App Router
 - TailwindCSS
-- Firebase Auth, Storage, and Database
+- Supabase for Auth, Storage, and Database
 - Multiple AI endpoints including OpenAI, Anthropic, and Replicate using Vercel's AI SDK

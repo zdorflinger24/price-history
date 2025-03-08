@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useFirebase } from '@/lib/contexts/FirebaseContext';
 import { Plus, Trash2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase/supabaseClient';
 
 interface ShippingLocation {
   id: string;
@@ -37,16 +37,11 @@ const generateId = (() => {
   };
 })();
 
-export default function QuotesPage() {
-  const { db } = useFirebase();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+export default function GeneralQuoteInformation() {
   const [locations, setLocations] = useState<ShippingLocation[]>([]);
-  const [newLocation, setNewLocation] = useState({ 
-    name: '', 
-    address: '', 
-    distance: '' 
-  });
+  const [isAddLocationModalOpen, setIsAddLocationModalOpen] = useState(false);
+  const [newLocation, setNewLocation] = useState({ name: '', address: '', distance: '' });
+  const [error, setError] = useState('');
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quoteInfo, setQuoteInfo] = useState({
     salesPerson: '',
@@ -57,182 +52,192 @@ export default function QuotesPage() {
   });
 
   useEffect(() => {
-    const loadLocations = async () => {
-      if (!db) {
-        setError('Database connection not available');
-        setLoading(false);
+    fetchLocations();
+  }, []);
+
+  const fetchLocations = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('shipping_locations')
+        .select('*')
+        .order('name');
+
+      if (error) {
+        console.error('Error fetching locations:', error);
+        setError('Failed to load shipping locations');
         return;
       }
 
-      try {
-        // Load existing locations from localStorage
-        const storedLocations = localStorage.getItem('shippingLocations');
-        const existingLocations = storedLocations ? JSON.parse(storedLocations) : [];
-        setLocations(existingLocations);
-        
-        setLoading(false);
-      } catch (err) {
-        setError('Error loading locations');
-        setLoading(false);
+      if (data) {
+        setLocations(data);
       }
-    };
-
-    loadLocations();
-  }, [db]);
-
-  const handleAddLocation = async () => {
-    if (!newLocation.name.trim() || !newLocation.address.trim() || !newLocation.distance) return;
-
-    try {
-      const location: ShippingLocation = {
-        id: generateId(),
-        name: newLocation.name.trim(),
-        address: newLocation.address.trim(),
-        distance: Number(newLocation.distance)
-      };
-
-      const updatedLocations = [...locations, location];
-      setLocations(updatedLocations);
-      setNewLocation({ name: '', address: '', distance: '' });
-      localStorage.setItem('shippingLocations', JSON.stringify(updatedLocations));
     } catch (error) {
-      console.error('Error adding location:', error);
+      console.error('Error fetching locations:', error);
+      setError('Failed to load shipping locations');
     }
   };
 
-  const handleRemoveLocation = (locationId: string) => {
-    // Check if location is used in any quotes before removing
-    const isUsed = quotes.some(quote => quote.location.id === locationId);
-    if (isUsed) {
-      alert('Cannot remove location as it is used in existing quotes');
+  const handleAddLocation = async () => {
+    if (!newLocation.name || !newLocation.address || !newLocation.distance) {
+      setError('Please fill in all fields');
       return;
     }
 
-    const updatedLocations = locations.filter(loc => loc.id !== locationId);
-    setLocations(updatedLocations);
-    localStorage.setItem('shippingLocations', JSON.stringify(updatedLocations));
+    try {
+      const { data, error } = await supabase
+        .from('shipping_locations')
+        .insert([{
+          name: newLocation.name,
+          address: newLocation.address,
+          distance: parseFloat(newLocation.distance)
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error adding location:', error);
+        setError('Failed to add shipping location');
+        return;
+      }
+
+      if (data) {
+        setLocations(prev => [...prev, data]);
+        setIsAddLocationModalOpen(false);
+        setNewLocation({ name: '', address: '', distance: '' });
+        setError('');
+      }
+    } catch (error) {
+      console.error('Error adding location:', error);
+      setError('Failed to add shipping location');
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    );
-  }
+  const handleDeleteLocation = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('shipping_locations')
+        .delete()
+        .eq('id', id);
 
-  if (error) {
-    return (
-      <div className="text-red-600 text-center py-8">
-        {error}
-      </div>
-    );
-  }
+      if (error) {
+        console.error('Error deleting location:', error);
+        setError('Failed to delete shipping location');
+        return;
+      }
+
+      setLocations(prev => prev.filter(location => location.id !== id));
+      setError('');
+    } catch (error) {
+      console.error('Error deleting location:', error);
+      setError('Failed to delete shipping location');
+    }
+  };
 
   return (
-    <div className="space-y-8">
-      <h2 className="text-2xl font-semibold text-gray-900 mb-6">General Quote Information</h2>
-      
-      {/* Quote Information Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Quote Information</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Salesperson <span className="text-red-500">*</span></label>
-            <select name="salesperson" value={quoteInfo.salesPerson} onChange={(e) => setQuoteInfo(prev => ({ ...prev, salesPerson: e.target.value }))} className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-              <option value="" disabled>Please select a salesperson</option>
-              <option value="John Doe">John Doe</option>
-              <option value="Jane Smith">Jane Smith</option>
-              {/* Add more salesperson options as needed */}
-            </select>
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Client Name</label>
-            <input
-              type="text"
-              value={quoteInfo.customerName}
-              onChange={(e) => setQuoteInfo(prev => ({ ...prev, customerName: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter client name"
-            />
-          </div>
-        </div>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-gray-900">Shipping Locations</h2>
+        <button
+          onClick={() => setIsAddLocationModalOpen(true)}
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Add Location
+        </button>
       </div>
 
-      {/* Add Location Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Add Shipping Location</h2>
-        <div className="grid grid-cols-5 gap-4">
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Location Name</label>
-            <input
-              type="text"
-              value={newLocation.name}
-              onChange={(e) => setNewLocation(prev => ({ ...prev, name: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="e.g. Warehouse A"
-            />
-          </div>
-          <div className="flex flex-col space-y-1 col-span-2">
-            <label className="text-sm font-medium text-gray-700">Delivery Address</label>
-            <input
-              type="text"
-              value={newLocation.address}
-              onChange={(e) => setNewLocation(prev => ({ ...prev, address: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter delivery address"
-            />
-          </div>
-          <div className="flex flex-col space-y-1">
-            <label className="text-sm font-medium text-gray-700">Distance (miles)</label>
-            <input
-              type="number"
-              value={newLocation.distance}
-              onChange={(e) => setNewLocation(prev => ({ ...prev, distance: e.target.value }))}
-              className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-              placeholder="Enter distance"
-              min="0"
-              step="1"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleAddLocation}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              type="button"
-            >
-              Add Location
-            </button>
-          </div>
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-sm text-red-600">{error}</p>
         </div>
-      </div>
+      )}
 
-      {/* Locations List */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Shipping Locations</h2>
-        {locations.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No shipping locations added yet.</p>
-        ) : (
-          <div className="space-y-4">
-            {locations.map(location => (
-              <div key={location.id} className="flex items-center justify-between bg-gray-50 p-4 rounded-lg">
-                <div className="flex-1">
-                  <div className="font-medium text-gray-900">{location.name}</div>
-                  <div className="text-sm text-gray-600">{location.address}</div>
-                  <div className="text-sm text-gray-500">Distance: {location.distance} miles</div>
-                </div>
-                <button
-                  onClick={() => handleRemoveLocation(location.id)}
-                  className="p-2 text-red-600 hover:text-red-800 transition-colors"
-                  type="button"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+      <div className="grid grid-cols-1 gap-4">
+        {locations.map((location) => (
+          <div
+            key={location.id}
+            className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm"
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">{location.name}</h3>
+                <p className="mt-1 text-sm text-gray-500">{location.address}</p>
+                <p className="mt-1 text-sm text-gray-500">{location.distance} miles</p>
               </div>
-            ))}
+              <button
+                onClick={() => handleDeleteLocation(location.id)}
+                className="text-gray-400 hover:text-red-500"
+              >
+                <Trash2 className="h-5 w-5" />
+              </button>
+            </div>
           </div>
-        )}
+        ))}
       </div>
+
+      {isAddLocationModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Add New Location</h3>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  id="name"
+                  value={newLocation.name}
+                  onChange={(e) => setNewLocation(prev => ({ ...prev, name: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="address" className="block text-sm font-medium text-gray-700">
+                  Address
+                </label>
+                <input
+                  type="text"
+                  id="address"
+                  value={newLocation.address}
+                  onChange={(e) => setNewLocation(prev => ({ ...prev, address: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="distance" className="block text-sm font-medium text-gray-700">
+                  Distance (miles)
+                </label>
+                <input
+                  type="number"
+                  id="distance"
+                  value={newLocation.distance}
+                  onChange={(e) => setNewLocation(prev => ({ ...prev, distance: e.target.value }))}
+                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setIsAddLocationModalOpen(false);
+                  setNewLocation({ name: '', address: '', distance: '' });
+                  setError('');
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddLocation}
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 } 

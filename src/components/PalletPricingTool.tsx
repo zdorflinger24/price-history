@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
-import { useFirebase } from '@/lib/contexts/FirebaseContext';
 import type { GlobalSettings, LumberPrice } from '@/lib/types';
+import { supabase } from '@/lib/supabase/supabaseClient';
+
+interface QuoteData {
+  palletId: string;
+  customerName: string;
+  date: Date;
+  totalPrice: number;
+}
 
 interface FormData {
   // Basic Info
@@ -89,7 +95,6 @@ const createNewPallet = (): PalletData => ({
 });
 
 export default function PalletPricingTool() {
-  const { db } = useFirebase();
   const [pallets, setPallets] = useState<PalletData[]>([createNewPallet()]);
   const [settings, setSettings] = useState<GlobalSettings>(defaultSettings);
   const [loading, setLoading] = useState(false);
@@ -97,30 +102,39 @@ export default function PalletPricingTool() {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    if (db) {
-      loadSettings();
-    }
-  }, [db]);
+    fetchSettings();
+  }, []);
 
-  const loadSettings = async () => {
-    if (!db) {
-      setError('Working with default settings until database connection is established.');
-      return;
-    }
-    
+  const fetchSettings = async () => {
     try {
-      const docRef = doc(db, 'global_pricing', 'current');
-      const docSnap = await getDoc(docRef);
-      
-      if (docSnap.exists()) {
-        setSettings(docSnap.data() as GlobalSettings);
-        setError('');
-      } else {
-        setError('Global settings not found. Using default values.');
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        console.error('Error fetching settings:', error);
+        setError('Error loading settings');
+        return;
+      }
+
+      if (data) {
+        const globalSettings: GlobalSettings = {
+          lumberPrices: data.lumber_prices,
+          buildIntricacyCosts: data.build_intricacy_costs,
+          additionalCosts: data.additional_costs,
+          transportationCosts: data.transportation_costs,
+          vehicleDimensions: data.vehicle_dimensions,
+          fastenerCosts: data.fastener_costs,
+          lumberProcessingCost: data.lumber_processing_cost
+        };
+        setSettings(globalSettings);
       }
     } catch (error) {
-      console.error('Error loading settings:', error);
-      setError('Error loading settings. Using default values.');
+      console.error('Error fetching settings:', error);
+      setError('Error loading settings');
     }
   };
 
@@ -226,26 +240,71 @@ export default function PalletPricingTool() {
     };
   };
 
-  const saveQuote = async (pallet: PalletData, results: CalculationResults) => {
-    if (!db) {
-      setError('Cannot save quote - database connection not available.');
-      return;
-    }
-
+  const handleSavePallet = async (pallet: PalletData) => {
     try {
-      const quoteData = {
-        ...pallet,
-        ...results,
-        timestamp: serverTimestamp(),
-        globalPricingSnapshot: settings,
-        status: 'created'
-      };
+      const { error } = await supabase
+        .from('pallets')
+        .insert([{
+          name: pallet.palletName,
+          dimensions: {
+            length: parseFloat(pallet.length),
+            width: parseFloat(pallet.width),
+            boardFeet: parseFloat(pallet.boardFeet)
+          },
+          lumber_type: pallet.lumberType,
+          heat_treated: pallet.heatTreated,
+          notched: pallet.notched,
+          painted: pallet.painted,
+          build_intricacy: pallet.buildIntricacy,
+          vehicle_type: pallet.vehicleType,
+          distance: parseFloat(pallet.distance),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
 
-      await addDoc(collection(db, 'quote_repository'), quoteData);
+      if (error) {
+        console.error('Error saving pallet:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error saving pallet:', error);
+      throw error;
+    }
+  };
+
+  const handleSaveQuote = async (quote: QuoteData) => {
+    try {
+      const { error } = await supabase
+        .from('quotes')
+        .insert([{
+          pallet_id: quote.palletId,
+          customer_name: quote.customerName,
+          date: quote.date.toISOString(),
+          total_price: quote.totalPrice,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
+
+      if (error) {
+        console.error('Error saving quote:', error);
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error saving quote:', error);
+      throw error;
+    }
+  };
+
+  const handleSaveAll = async (pallets: PalletData[]) => {
+    try {
+      const updatedPallets = pallets.filter(pallet => pallet.results);
+      
+      await Promise.all(updatedPallets.map(pallet => handleSavePallet(pallet)));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (error) {
-      setError('Error saving quote');
+      console.error('Error saving pallets:', error);
+      setError('Error saving pallets');
     }
   };
 
@@ -253,7 +312,6 @@ export default function PalletPricingTool() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setSaveSuccess(false);
 
     try {
       const updatedPallets = pallets.map(pallet => ({
@@ -262,20 +320,15 @@ export default function PalletPricingTool() {
       }));
 
       setPallets(updatedPallets);
-
+      
       // Save all pallets to the database
-      if (db) {
-        await Promise.all(updatedPallets.map(pallet => 
-          pallet.results && saveQuote(pallet, pallet.results)
-        ));
-        setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 3000);
-      }
+      await handleSaveAll(updatedPallets);
     } catch (error) {
-      setError('Error calculating results');
+      console.error('Error:', error);
+      setError('An error occurred while processing the pallets');
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleReset = () => {

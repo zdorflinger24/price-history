@@ -63,6 +63,5 @@ export interface QuoteData {
     totalCost: number;
     pricePerUnit: number;
   };
-  globalPricingRef: string;
   timestamp: Date;
 } 
