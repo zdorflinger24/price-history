@@ -7,6 +7,7 @@ import AdvancedCalculator from "@/app/components/AdvancedCalculator";
 import { Calculator, Settings as SettingsIcon, BarChart2, Truck } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import AbacusIcon from "@/app/components/AbacusIcon";
+import AuthWrapper from '@/app/components/AuthWrapper';
 
 const QuotesPage = dynamic(() => import("@/app/components/GeneralQuoteInformation"), { ssr: false });
 
@@ -14,65 +15,67 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState('quotes');
 
   return (
-    <main className="container mx-auto px-4 py-8">
-      <div className="flex justify-end mb-8">
-        <div className="flex space-x-4">
-          <button
-            onClick={() => setActiveTab('quotes')}
-            className={`p-2 rounded-lg transition-colors ${
-              activeTab === 'quotes'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-            title="General Quote Information"
-          >
-            <Truck className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => setActiveTab('pricing')}
-            className={`p-2 rounded-lg transition-colors ${
-              activeTab === 'pricing'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-            title="Basic Quote Calculator"
-          >
-            <AbacusIcon className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => setActiveTab('advanced')}
-            className={`p-2 rounded-lg transition-colors ${
-              activeTab === 'advanced'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-            title="Advanced Pricing Calculator"
-          >
-            <Calculator className="w-5 h-5" />
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`p-2 rounded-lg transition-colors ${
-              activeTab === 'settings'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-            title="Settings"
-          >
-            <SettingsIcon className="w-5 h-5" />
-          </button>
+    <AuthWrapper>
+      <main className="container mx-auto px-4 py-8">
+        <div className="flex justify-end mb-8">
+          <div className="flex space-x-4">
+            <button
+              onClick={() => setActiveTab('quotes')}
+              className={`p-2 rounded-lg transition-colors ${
+                activeTab === 'quotes'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="General Quote Information"
+            >
+              <Truck className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setActiveTab('pricing')}
+              className={`p-2 rounded-lg transition-colors ${
+                activeTab === 'pricing'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="Basic Quote Calculator"
+            >
+              <AbacusIcon className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setActiveTab('advanced')}
+              className={`p-2 rounded-lg transition-colors ${
+                activeTab === 'advanced'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="Advanced Pricing Calculator"
+            >
+              <Calculator className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`p-2 rounded-lg transition-colors ${
+                activeTab === 'settings'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+              title="Settings"
+            >
+              <SettingsIcon className="w-5 h-5" />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {activeTab === 'quotes' ? (
-        <QuotesPage />
-      ) : activeTab === 'pricing' ? (
-        <BasicQuoteCalculator />
-      ) : activeTab === 'advanced' ? (
-        <AdvancedCalculator />
-      ) : activeTab === 'settings' ? (
-        <SettingsPage />
-      ) : null}
-    </main>
+        {activeTab === 'quotes' ? (
+          <QuotesPage />
+        ) : activeTab === 'pricing' ? (
+          <BasicQuoteCalculator />
+        ) : activeTab === 'advanced' ? (
+          <AdvancedCalculator />
+        ) : activeTab === 'settings' ? (
+          <SettingsPage />
+        ) : null}
+      </main>
+    </AuthWrapper>
   );
 }

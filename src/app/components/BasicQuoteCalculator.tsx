@@ -52,6 +52,28 @@ export default function BasicQuoteCalculator() {
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
+    // Check authentication status when component mounts
+    const checkAuth = async () => {
+      try {
+        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        
+        if (authError) {
+          console.error('Error checking auth status:', authError);
+          setError('Authentication error');
+          return;
+        }
+        
+        if (!session) {
+          setError('Please sign in with Google to use the calculator');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+        setError('Authentication error');
+      }
+    };
+
+    checkAuth();
     loadSettingsAndLocations();
   }, []);
 
@@ -230,6 +252,13 @@ export default function BasicQuoteCalculator() {
   };
 
   const handleGenerateQuote = async () => {
+    // First check if we have an active session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      setError('No active session. Please try again.');
+      return;
+    }
+
     // Validate shipping locations and transportation types
     const missingLocations = pallets.some(pallet => !pallet.locationId);
     const missingTransportation = pallets.some(pallet => !pallet.transportationType);
@@ -289,6 +318,32 @@ export default function BasicQuoteCalculator() {
           throw new Error(`Missing calculation results for pallet ${pallet.id}`);
         }
 
+        // Validate required fields
+        if (!pallet.locationId) {
+          throw new Error('Location ID is required');
+        }
+        if (!pallet.transportationType) {
+          throw new Error('Transportation type is required');
+        }
+        if (!pallet.palletsPerTruck || isNaN(parseInt(pallet.palletsPerTruck))) {
+          throw new Error('Valid pallets per truck is required');
+        }
+        if (!pallet.length || isNaN(parseFloat(pallet.length))) {
+          throw new Error('Valid length is required');
+        }
+        if (!pallet.width || isNaN(parseFloat(pallet.width))) {
+          throw new Error('Valid width is required');
+        }
+        if (!pallet.boardFeet || isNaN(parseFloat(pallet.boardFeet))) {
+          throw new Error('Valid board feet is required');
+        }
+        if (!pallet.lumberType) {
+          throw new Error('Lumber type is required');
+        }
+        if (!pallet.buildIntricacy) {
+          throw new Error('Build intricacy is required');
+        }
+
         return {
           quote_type: 'basic',
           customer_name: '',
@@ -320,7 +375,10 @@ export default function BasicQuoteCalculator() {
           profit_margin_30: pallet.results.profitMargin30,
           profit_margin_35: pallet.results.profitMargin35,
           transportation_cost: pallet.results.transportationCost,
-          total_cost_with_transport: pallet.results.totalCostWithTransport
+          total_cost_with_transport: pallet.results.totalCostWithTransport,
+          
+          // Add status field
+          status: 'draft'
         };
       });
 
@@ -329,8 +387,8 @@ export default function BasicQuoteCalculator() {
         .insert(quotesData);
 
       if (error) {
-        console.error('Error saving quotes:', error);
-        setError('Failed to save quotes');
+        console.error('Error saving quotes:', error.message || error);
+        setError(`Failed to save quotes: ${error.message || 'Unknown error'}`);
         return;
       }
 
